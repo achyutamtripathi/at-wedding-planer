@@ -33,6 +33,8 @@ import {
   AlertCircle,
   Key,
   Menu as MenuIcon,
+  PanelLeftClose,
+  PanelLeftOpen,
   UserCheck,
   Activity,
   Heart,
@@ -796,6 +798,21 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(`${STORAGE_KEY}_sidebar_collapsed`) === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`${STORAGE_KEY}_sidebar_collapsed`, String(sidebarCollapsed));
+    } catch {
+      // ignore storage errors
+    }
+  }, [sidebarCollapsed]);
   const [toast, setToast] = useState(null);
   const [weddingModalOpen, setWeddingModalOpen] = useState(false);
   const [editingWedding, setEditingWedding] = useState(null);
@@ -1097,58 +1114,95 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#FAF8F5] text-stone-900 flex flex-col lg:flex-row">
-      {/* DESKTOP SIDEBAR */}
-      <aside className="hidden lg:flex lg:w-64 lg:flex-col lg:fixed lg:inset-y-0 bg-white border-r border-stone-200/90 shadow-xs z-30">
+      {/* DESKTOP SIDEBAR (COLLAPSIBLE) */}
+      <aside
+        className={`hidden lg:flex ${
+          sidebarCollapsed ? 'lg:w-20' : 'lg:w-64'
+        } lg:flex-col lg:fixed lg:inset-y-0 bg-white border-r border-stone-200/90 shadow-xs z-30 transition-all duration-200`}
+      >
         {/* Brand Header */}
-        <div className="p-4 border-b border-stone-200/80 bg-gradient-to-br from-[#7A1C24] to-[#561117] text-white">
-          <div className="flex items-center gap-3">
-            <ATLogo size={42} />
-            <div className="min-w-0">
-              <h1 className="font-bold text-base tracking-tight truncate">AT Wedding Planner</h1>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <KGLogo size={16} />
-                <span className="text-[11px] text-amber-200 truncate">Krishna Groups</span>
-              </div>
+        <div className="p-3.5 border-b border-stone-200/80 bg-gradient-to-br from-[#7A1C24] to-[#561117] text-white">
+          <div
+            className={`flex items-center ${
+              sidebarCollapsed ? 'flex-col gap-2 justify-center' : 'justify-between gap-2'
+            }`}
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <ATLogo size={sidebarCollapsed ? 38 : 40} />
+              {!sidebarCollapsed && (
+                <div className="min-w-0">
+                  <h1 className="font-bold text-sm tracking-tight truncate">AT Wedding Planner</h1>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <KGLogo size={15} />
+                    <span className="text-[11px] text-amber-200 truncate">Krishna Groups</span>
+                  </div>
+                </div>
+              )}
             </div>
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed((c) => !c)}
+              title={sidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+              className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-amber-200 transition shrink-0"
+            >
+              {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+            </button>
           </div>
         </div>
 
         {/* Active Wedding Switcher */}
         <div className="p-3 border-b border-stone-200/80 bg-stone-50/70">
-          <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-500 mb-1">
-            Active Wedding Workspace
-          </label>
-          {accessibleWeddings.length > 0 ? (
-            <select
-              value={activeWedding?.id || ''}
-              onChange={(e) => setState((prev) => ({ ...prev, activeWeddingId: e.target.value }))}
-              className="w-full px-2.5 py-2 rounded-xl border border-stone-300 bg-white text-xs font-semibold text-stone-800 focus:ring-2 focus:ring-[#7A1C24]"
-            >
-              {accessibleWeddings.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.title}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <div className="text-xs text-stone-500 italic py-1">No wedding plan yet</div>
-          )}
+          {!sidebarCollapsed ? (
+            <>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-500 mb-1">
+                Active Wedding Workspace
+              </label>
+              {accessibleWeddings.length > 0 ? (
+                <select
+                  value={activeWedding?.id || ''}
+                  onChange={(e) => setState((prev) => ({ ...prev, activeWeddingId: e.target.value }))}
+                  className="w-full px-2.5 py-2 rounded-xl border border-stone-300 bg-white text-xs font-semibold text-stone-800 focus:ring-2 focus:ring-[#7A1C24]"
+                >
+                  {accessibleWeddings.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {w.title}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="text-xs text-stone-500 italic py-1">No wedding plan yet</div>
+              )}
 
-          {isSuperAdmin && (
-            <button
-              onClick={() => {
-                setEditingWedding(null);
-                setWeddingModalOpen(true);
-              }}
-              className="mt-2 w-full py-1.5 px-2.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-[#7A1C24] border border-amber-300/80 text-xs font-semibold flex items-center justify-center gap-1.5 transition"
-            >
-              <Plus size={14} /> Add Wedding Plan
-            </button>
+              {isSuperAdmin && (
+                <button
+                  onClick={() => {
+                    setEditingWedding(null);
+                    setWeddingModalOpen(true);
+                  }}
+                  className="mt-2 w-full py-1.5 px-2.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-[#7A1C24] border border-amber-300/80 text-xs font-semibold flex items-center justify-center gap-1.5 transition"
+                >
+                  <Plus size={14} /> Add Wedding Plan
+                </button>
+              )}
+            </>
+          ) : (
+            isSuperAdmin && (
+              <button
+                onClick={() => {
+                  setEditingWedding(null);
+                  setWeddingModalOpen(true);
+                }}
+                title="Add Wedding Plan"
+                className="w-full py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-[#7A1C24] border border-amber-300/80 flex items-center justify-center transition"
+              >
+                <Plus size={16} />
+              </button>
+            )
           )}
         </div>
 
         {/* Navigation Links */}
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+        <nav className="flex-1 p-2.5 space-y-1 overflow-y-auto">
           {visibleModules.map((mod) => {
             const Icon = mod.icon;
             const active = activeTab === mod.key;
@@ -1156,27 +1210,38 @@ export default function App() {
               <button
                 key={mod.key}
                 onClick={() => setActiveTab(mod.key)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition ${
+                title={mod.label}
+                className={`w-full flex items-center ${
+                  sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3 py-2.5'
+                } rounded-xl text-sm font-semibold transition ${
                   active
                     ? 'bg-[#7A1C24] text-white shadow-sm'
                     : 'text-stone-700 hover:bg-stone-100'
                 }`}
               >
-                <Icon size={18} className={active ? 'text-amber-300' : 'text-stone-500'} />
-                <span>{mod.label}</span>
+                <Icon
+                  size={18}
+                  className={`shrink-0 ${active ? 'text-amber-300' : 'text-stone-500'}`}
+                />
+                {!sidebarCollapsed && <span className="truncate">{mod.label}</span>}
               </button>
             );
           })}
 
           {(isSuperAdmin || isSubAdmin) && (
             <div className="pt-3 mt-3 border-t border-stone-200 space-y-1">
-              <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-stone-400">
-                Administration
-              </div>
+              {!sidebarCollapsed && (
+                <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-stone-400">
+                  Administration
+                </div>
+              )}
               {isSuperAdmin && (
                 <button
                   onClick={() => setActiveTab('weddings')}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition ${
+                  title="Manage Weddings"
+                  className={`w-full flex items-center ${
+                    sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3 py-2.5'
+                  } rounded-xl text-sm font-semibold transition ${
                     activeTab === 'weddings'
                       ? 'bg-[#7A1C24] text-white shadow-sm'
                       : 'text-stone-700 hover:bg-stone-100'
@@ -1184,14 +1249,19 @@ export default function App() {
                 >
                   <Heart
                     size={18}
-                    className={activeTab === 'weddings' ? 'text-amber-300' : 'text-stone-500'}
+                    className={`shrink-0 ${
+                      activeTab === 'weddings' ? 'text-amber-300' : 'text-stone-500'
+                    }`}
                   />
-                  <span>Manage Weddings</span>
+                  {!sidebarCollapsed && <span className="truncate">Manage Weddings</span>}
                 </button>
               )}
               <button
                 onClick={() => setActiveTab('users')}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition ${
+                title="Users & Permissions"
+                className={`w-full flex items-center ${
+                  sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3 py-2.5'
+                } rounded-xl text-sm font-semibold transition ${
                   activeTab === 'users'
                     ? 'bg-[#7A1C24] text-white shadow-sm'
                     : 'text-stone-700 hover:bg-stone-100'
@@ -1199,9 +1269,11 @@ export default function App() {
               >
                 <ShieldCheck
                   size={18}
-                  className={activeTab === 'users' ? 'text-amber-300' : 'text-stone-500'}
+                  className={`shrink-0 ${
+                    activeTab === 'users' ? 'text-amber-300' : 'text-stone-500'
+                  }`}
                 />
-                <span>Users & Permissions</span>
+                {!sidebarCollapsed && <span className="truncate">Users & Permissions</span>}
               </button>
             </div>
           )}
@@ -1209,34 +1281,56 @@ export default function App() {
 
         {/* User Profile Footer */}
         <div className="p-3 border-t border-stone-200 bg-stone-50/80">
-          <div className="flex items-center gap-2.5">
-            <UserAvatar name={currentUser.name} avatar={currentUser.avatar} size="sm" />
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-bold text-stone-900 truncate">{currentUser.name}</p>
-              <span className="inline-block text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-100 text-[#7A1C24]">
-                {currentUser.role.replace('_', ' ')}
-              </span>
+          {!sidebarCollapsed ? (
+            <div className="flex items-center gap-2.5">
+              <UserAvatar name={currentUser.name} avatar={currentUser.avatar} size="sm" />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold text-stone-900 truncate">{currentUser.name}</p>
+                <span className="inline-block text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-100 text-[#7A1C24]">
+                  {currentUser.role.replace('_', ' ')}
+                </span>
+              </div>
+              <button
+                onClick={() => setProfileModalOpen(true)}
+                title="Edit Profile & Password"
+                className="p-1.5 rounded-lg text-stone-600 hover:bg-stone-200/70 transition"
+              >
+                <Key size={15} />
+              </button>
+              <button
+                onClick={() => setCurrentUserId(null)}
+                title="Sign Out"
+                className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 transition"
+              >
+                <LogOut size={15} />
+              </button>
             </div>
-            <button
-              onClick={() => setProfileModalOpen(true)}
-              title="Edit Profile & Password"
-              className="p-1.5 rounded-lg text-stone-600 hover:bg-stone-200/70 transition"
-            >
-              <Key size={15} />
-            </button>
-            <button
-              onClick={() => setCurrentUserId(null)}
-              title="Sign Out"
-              className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 transition"
-            >
-              <LogOut size={15} />
-            </button>
-          </div>
+          ) : (
+            <div className="flex flex-col items-center gap-2">
+              <button
+                onClick={() => setProfileModalOpen(true)}
+                title={`${currentUser.name} — Edit Profile & Password`}
+              >
+                <UserAvatar name={currentUser.name} avatar={currentUser.avatar} size="sm" />
+              </button>
+              <button
+                onClick={() => setCurrentUserId(null)}
+                title="Sign Out"
+                className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 transition"
+              >
+                <LogOut size={15} />
+              </button>
+            </div>
+          )}
         </div>
       </aside>
 
       {/* MAIN CONTENT SHELL */}
-      <div className="flex-1 lg:pl-64 flex flex-col min-h-screen pb-20 lg:pb-0">
+      <div
+        className={`flex-1 ${
+          sidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64'
+        } flex flex-col min-h-screen pb-20 lg:pb-0 transition-all duration-200`}
+      >
         {/* TOP HEADER */}
         <header className="sticky top-0 z-20 bg-white/95 backdrop-blur-xs border-b border-stone-200 px-4 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
@@ -1245,6 +1339,14 @@ export default function App() {
               className="lg:hidden p-2 rounded-xl border border-stone-200 text-stone-700"
             >
               <MenuIcon size={18} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed((c) => !c)}
+              title={sidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+              className="hidden lg:inline-flex p-2 rounded-xl border border-stone-200 text-stone-700 hover:bg-stone-100 transition"
+            >
+              {sidebarCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
             </button>
             <div className="lg:hidden">
               <ATLogo size={34} />
