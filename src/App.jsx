@@ -820,10 +820,18 @@ export default function App() {
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [cloudStatus, setCloudStatus] = useState(supabase ? 'connecting' : 'local');
   const isRemoteUpdateRef = useRef(false);
+  const hasLoadedCloudRef = useRef(false);
+  const hasUserMutatedRef = useRef(false);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
+  };
+
+  // Wrapper so only genuine user/app mutations trigger a cloud upsert
+  const updateState = (updater) => {
+    hasUserMutatedRef.current = true;
+    setState(updater);
   };
 
   // Initial Supabase Load + Real-Time Subscription
@@ -841,6 +849,7 @@ export default function App() {
 
         if (error) {
           console.error('Supabase fetch error:', error);
+          hasLoadedCloudRef.current = true;
           setCloudStatus('error');
           return;
         }
@@ -852,8 +861,10 @@ export default function App() {
             activeWeddingId: prev.activeWeddingId || data.payload.activeWeddingId || '',
           }));
         }
+        hasLoadedCloudRef.current = true;
         setCloudStatus('connected');
       } catch {
+        hasLoadedCloudRef.current = true;
         setCloudStatus('error');
       }
     };
@@ -883,7 +894,7 @@ export default function App() {
     };
   }, []);
 
-  // Persist to localStorage & sync to Supabase
+  // Persist to localStorage & safely sync to Supabase ONLY after initial cloud load and real user changes
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -892,17 +903,22 @@ export default function App() {
     }
 
     if (!supabase) return;
+    if (!hasLoadedCloudRef.current) return;
     if (isRemoteUpdateRef.current) {
       isRemoteUpdateRef.current = false;
       return;
     }
+    if (!hasUserMutatedRef.current) return;
 
     const timer = setTimeout(async () => {
       try {
         const { error } = await supabase
           .from('app_state')
           .upsert({ id: CLOUD_ROW_ID, payload: state, updated_at: new Date().toISOString() });
-        if (!error) setCloudStatus('connected');
+        if (!error) {
+          hasUserMutatedRef.current = false;
+          setCloudStatus('connected');
+        }
       } catch {
         // ignore transient network drop
       }
@@ -947,7 +963,7 @@ export default function App() {
 
   useEffect(() => {
     if (activeWedding && activeWedding.id !== state.activeWeddingId) {
-      setState((prev) => ({ ...prev, activeWeddingId: activeWedding.id }));
+      updateState((prev) => ({ ...prev, activeWeddingId: activeWedding.id }));
     }
   }, [activeWedding, state.activeWeddingId]);
 
@@ -1004,7 +1020,7 @@ export default function App() {
       details,
       timestamp: new Date().toISOString(),
     };
-    setState((prev) => ({
+    updateState((prev) => ({
       ...prev,
       auditLogs: [logEntry, ...(prev.auditLogs || [])].slice(0, 500),
     }));
@@ -1032,7 +1048,7 @@ export default function App() {
   const handleSaveWedding = (form) => {
     if (!isSuperAdmin) return;
     if (editingWedding) {
-      setState((prev) => ({
+      updateState((prev) => ({
         ...prev,
         weddings: prev.weddings.map((w) => (w.id === editingWedding.id ? { ...w, ...form } : w)),
       }));
@@ -1044,7 +1060,7 @@ export default function App() {
         ...form,
         createdAt: new Date().toISOString(),
       };
-      setState((prev) => ({
+      updateState((prev) => ({
         ...prev,
         weddings: [...prev.weddings, newWedding],
         activeWeddingId: newWedding.id,
@@ -1060,7 +1076,7 @@ export default function App() {
     if (!isSuperAdmin || !deleteWeddingTarget) return;
     const targetId = deleteWeddingTarget.id;
     const title = deleteWeddingTarget.title;
-    setState((prev) => {
+    updateState((prev) => {
       const remaining = prev.weddings.filter((w) => w.id !== targetId);
       return {
         ...prev,
@@ -1160,7 +1176,7 @@ export default function App() {
               {accessibleWeddings.length > 0 ? (
                 <select
                   value={activeWedding?.id || ''}
-                  onChange={(e) => setState((prev) => ({ ...prev, activeWeddingId: e.target.value }))}
+                  onChange={(e) => updateState((prev) => ({ ...prev, activeWeddingId: e.target.value }))}
                   className="w-full px-2.5 py-2 rounded-xl border border-stone-300 bg-white text-xs font-semibold text-stone-800 focus:ring-2 focus:ring-[#7A1C24]"
                 >
                   {accessibleWeddings.map((w) => (
@@ -1443,7 +1459,7 @@ export default function App() {
                   <select
                     value={activeWedding?.id || ''}
                     onChange={(e) => {
-                      setState((prev) => ({ ...prev, activeWeddingId: e.target.value }));
+                      updateState((prev) => ({ ...prev, activeWeddingId: e.target.value }));
                       setMobileMenuOpen(false);
                     }}
                     className="w-full px-2.5 py-2 rounded-lg border border-stone-300 bg-white text-xs font-semibold"
@@ -1549,7 +1565,7 @@ export default function App() {
               weddings={state.weddings}
               activeWeddingId={activeWedding?.id}
               onSelect={(id) => {
-                setState((prev) => ({ ...prev, activeWeddingId: id }));
+                updateState((prev) => ({ ...prev, activeWeddingId: id }));
                 setActiveTab('dashboard');
               }}
               onAdd={() => {
@@ -1565,7 +1581,7 @@ export default function App() {
           ) : activeTab === 'users' && (isSuperAdmin || isSubAdmin) ? (
             <UsersAdminModule
               state={state}
-              setState={setState}
+              setState={updateState}
               currentUser={currentUser}
               accessibleWeddings={accessibleWeddings}
               recordAudit={recordAudit}
@@ -1601,7 +1617,7 @@ export default function App() {
                   events={weddingEvents}
                   weddingId={activeWedding.id}
                   perms={getModulePerms('events')}
-                  setState={setState}
+                  setState={updateState}
                   stampUser={stampUser}
                   recordAudit={recordAudit}
                   showToast={showToast}
@@ -1612,7 +1628,7 @@ export default function App() {
                   bookings={weddingBookings}
                   weddingId={activeWedding.id}
                   perms={getModulePerms('bookings')}
-                  setState={setState}
+                  setState={updateState}
                   stampUser={stampUser}
                   recordAudit={recordAudit}
                   showToast={showToast}
@@ -1623,7 +1639,7 @@ export default function App() {
                   guests={weddingGuests}
                   activeWedding={activeWedding}
                   perms={getModulePerms('guests')}
-                  setState={setState}
+                  setState={updateState}
                   stampUser={stampUser}
                   recordAudit={recordAudit}
                   showToast={showToast}
@@ -1634,7 +1650,7 @@ export default function App() {
                   invites={weddingInvites}
                   activeWedding={activeWedding}
                   perms={getModulePerms('invites')}
-                  setState={setState}
+                  setState={updateState}
                   stampUser={stampUser}
                   recordAudit={recordAudit}
                   showToast={showToast}
@@ -1645,7 +1661,7 @@ export default function App() {
                   menu={weddingMenu}
                   weddingId={activeWedding.id}
                   perms={getModulePerms('menu')}
-                  setState={setState}
+                  setState={updateState}
                   stampUser={stampUser}
                   recordAudit={recordAudit}
                   showToast={showToast}
@@ -1656,7 +1672,7 @@ export default function App() {
                   expenses={weddingExpenses}
                   weddingId={activeWedding.id}
                   perms={getModulePerms('expenses')}
-                  setState={setState}
+                  setState={updateState}
                   stampUser={stampUser}
                   recordAudit={recordAudit}
                   showToast={showToast}
@@ -1668,7 +1684,7 @@ export default function App() {
                   users={state.users}
                   weddingId={activeWedding.id}
                   perms={getModulePerms('tasks')}
-                  setState={setState}
+                  setState={updateState}
                   stampUser={stampUser}
                   recordAudit={recordAudit}
                   showToast={showToast}
@@ -1724,7 +1740,7 @@ export default function App() {
         onClose={() => setProfileModalOpen(false)}
         user={currentUser}
         onSave={(updates) => {
-          setState((prev) => ({
+          updateState((prev) => ({
             ...prev,
             users: prev.users.map((u) => (u.id === currentUser.id ? { ...u, ...updates } : u)),
           }));
@@ -2443,7 +2459,7 @@ function EventsModule({ events, weddingId, perms, setState, stampUser, recordAud
     e.preventDefault();
     if (!form.name.trim()) return;
     if (editing) {
-      setState((prev) => ({
+      updateState((prev) => ({
         ...prev,
         events: prev.events.map((ev) =>
           ev.id === editing.id ? { ...ev, ...form, ...stampUser(ev) } : ev
@@ -2459,7 +2475,7 @@ function EventsModule({ events, weddingId, perms, setState, stampUser, recordAud
         checklist: [],
         ...stampUser(),
       };
-      setState((prev) => ({ ...prev, events: [...prev.events, created] }));
+      updateState((prev) => ({ ...prev, events: [...prev.events, created] }));
       recordAudit('Events', 'Created', `Added event "${form.name}"`);
       showToast('Event added');
     }
@@ -2467,14 +2483,14 @@ function EventsModule({ events, weddingId, perms, setState, stampUser, recordAud
   };
 
   const handleDelete = (ev) => {
-    setState((prev) => ({ ...prev, events: prev.events.filter((x) => x.id !== ev.id) }));
+    updateState((prev) => ({ ...prev, events: prev.events.filter((x) => x.id !== ev.id) }));
     recordAudit('Events', 'Deleted', `Deleted event "${ev.name}"`);
     showToast('Event deleted');
     setDeleteTarget(null);
   };
 
   const handleBulkDelete = () => {
-    setState((prev) => ({
+    updateState((prev) => ({
       ...prev,
       events: prev.events.filter((x) => !selectedIds.includes(x.id)),
     }));
@@ -2487,7 +2503,7 @@ function EventsModule({ events, weddingId, perms, setState, stampUser, recordAud
   const addChecklistItem = (eventId) => {
     const text = (newChecklistText[eventId] || '').trim();
     if (!text) return;
-    setState((prev) => ({
+    updateState((prev) => ({
       ...prev,
       events: prev.events.map((ev) =>
         ev.id === eventId
@@ -2504,7 +2520,7 @@ function EventsModule({ events, weddingId, perms, setState, stampUser, recordAud
 
   const toggleChecklistItem = (eventId, chkId) => {
     if (!perms.update) return;
-    setState((prev) => ({
+    updateState((prev) => ({
       ...prev,
       events: prev.events.map((ev) =>
         ev.id === eventId
@@ -2521,7 +2537,7 @@ function EventsModule({ events, weddingId, perms, setState, stampUser, recordAud
 
   const deleteChecklistItem = (eventId, chkId) => {
     if (!perms.update && !perms.delete) return;
-    setState((prev) => ({
+    updateState((prev) => ({
       ...prev,
       events: prev.events.map((ev) =>
         ev.id === eventId
@@ -2971,7 +2987,7 @@ function GuestsModule({
     e.preventDefault();
     if (!form.fullName.trim()) return;
     if (editing) {
-      setState((prev) => ({
+      updateState((prev) => ({
         ...prev,
         guests: prev.guests.map((g) =>
           g.id === editing.id
@@ -2996,7 +3012,7 @@ function GuestsModule({
         kids: Number(form.kids) || 0,
         ...stampUser(),
       };
-      setState((prev) => ({ ...prev, guests: [...prev.guests, created] }));
+      updateState((prev) => ({ ...prev, guests: [...prev.guests, created] }));
       recordAudit('Guests', 'Created', `Added guest "${form.fullName}"`);
       showToast('Guest added');
     }
@@ -3004,14 +3020,14 @@ function GuestsModule({
   };
 
   const handleDelete = (g) => {
-    setState((prev) => ({ ...prev, guests: prev.guests.filter((x) => x.id !== g.id) }));
+    updateState((prev) => ({ ...prev, guests: prev.guests.filter((x) => x.id !== g.id) }));
     recordAudit('Guests', 'Deleted', `Deleted guest "${g.fullName}"`);
     showToast('Guest deleted');
     setDeleteTarget(null);
   };
 
   const handleBulkDelete = () => {
-    setState((prev) => ({
+    updateState((prev) => ({
       ...prev,
       guests: prev.guests.filter((x) => !selectedIds.includes(x.id)),
     }));
@@ -3024,7 +3040,7 @@ function GuestsModule({
   const quickUpdateField = (guestId, field, value) => {
     if (!perms.update) return;
     const target = guests.find((g) => g.id === guestId);
-    setState((prev) => ({
+    updateState((prev) => ({
       ...prev,
       guests: prev.guests.map((g) =>
         g.id === guestId ? { ...g, [field]: value, ...stampUser(g) } : g
@@ -3162,7 +3178,7 @@ function GuestsModule({
 
   const confirmCSVUpsert = () => {
     const { toAdd, toUpdate } = upsertPreview;
-    setState((prev) => {
+    updateState((prev) => {
       const updateMap = new Map(toUpdate.map((u) => [u.existingId, u.data]));
       const updatedExisting = prev.guests.map((g) => {
         if (updateMap.has(g.id)) {
@@ -3957,7 +3973,7 @@ function InvitesMediaModule({
     e.preventDefault();
     if (!form.title.trim()) return;
     if (editing) {
-      setState((prev) => ({
+      updateState((prev) => ({
         ...prev,
         invites: prev.invites.map((it) =>
           it.id === editing.id ? { ...it, ...form, ...stampUser(it) } : it
@@ -3972,7 +3988,7 @@ function InvitesMediaModule({
         ...form,
         ...stampUser(),
       };
-      setState((prev) => ({ ...prev, invites: [created, ...prev.invites] }));
+      updateState((prev) => ({ ...prev, invites: [created, ...prev.invites] }));
       recordAudit('Invites & Media', 'Created', `Added invite "${form.title}"`);
       showToast('Invite media added');
     }
@@ -3980,7 +3996,7 @@ function InvitesMediaModule({
   };
 
   const handleDelete = (item) => {
-    setState((prev) => ({ ...prev, invites: prev.invites.filter((x) => x.id !== item.id) }));
+    updateState((prev) => ({ ...prev, invites: prev.invites.filter((x) => x.id !== item.id) }));
     recordAudit('Invites & Media', 'Deleted', `Deleted invite "${item.title}"`);
     showToast('Invite deleted');
     setDeleteTarget(null);
@@ -4436,7 +4452,7 @@ function MenuModule({ menu, weddingId, perms, setState, stampUser, recordAudit, 
     e.preventDefault();
     if (!form.dishName.trim()) return;
     if (editing) {
-      setState((prev) => ({
+      updateState((prev) => ({
         ...prev,
         menu: prev.menu.map((m) =>
           m.id === editing.id ? { ...m, ...form, ...stampUser(m) } : m
@@ -4451,7 +4467,7 @@ function MenuModule({ menu, weddingId, perms, setState, stampUser, recordAudit, 
         ...form,
         ...stampUser(),
       };
-      setState((prev) => ({ ...prev, menu: [...prev.menu, created] }));
+      updateState((prev) => ({ ...prev, menu: [...prev.menu, created] }));
       recordAudit('Menu', 'Created', `Added dish "${form.dishName}"`);
       showToast('Dish added to menu');
     }
@@ -4459,14 +4475,14 @@ function MenuModule({ menu, weddingId, perms, setState, stampUser, recordAudit, 
   };
 
   const handleDelete = (dish) => {
-    setState((prev) => ({ ...prev, menu: prev.menu.filter((x) => x.id !== dish.id) }));
+    updateState((prev) => ({ ...prev, menu: prev.menu.filter((x) => x.id !== dish.id) }));
     recordAudit('Menu', 'Deleted', `Deleted dish "${dish.dishName}"`);
     showToast('Dish deleted');
     setDeleteTarget(null);
   };
 
   const handleBulkDelete = () => {
-    setState((prev) => ({
+    updateState((prev) => ({
       ...prev,
       menu: prev.menu.filter((x) => !selectedIds.includes(x.id)),
     }));
@@ -4930,7 +4946,7 @@ function ExpensesModule({
       advancePaid: Number(form.advancePaid) || 0,
     };
     if (editing) {
-      setState((prev) => ({
+      updateState((prev) => ({
         ...prev,
         expenses: prev.expenses.map((x) =>
           x.id === editing.id ? { ...x, ...payload, ...stampUser(x) } : x
@@ -4949,7 +4965,7 @@ function ExpensesModule({
         ...payload,
         ...stampUser(),
       };
-      setState((prev) => ({ ...prev, expenses: [...prev.expenses, created] }));
+      updateState((prev) => ({ ...prev, expenses: [...prev.expenses, created] }));
       recordAudit(
         'Expenses',
         'Created',
@@ -4962,14 +4978,14 @@ function ExpensesModule({
   };
 
   const handleDelete = (item) => {
-    setState((prev) => ({ ...prev, expenses: prev.expenses.filter((x) => x.id !== item.id) }));
+    updateState((prev) => ({ ...prev, expenses: prev.expenses.filter((x) => x.id !== item.id) }));
     recordAudit('Expenses', 'Deleted', `Deleted expense "${item.description}"`);
     showToast('Expense deleted');
     setDeleteTarget(null);
   };
 
   const handleBulkDelete = () => {
-    setState((prev) => ({
+    updateState((prev) => ({
       ...prev,
       expenses: prev.expenses.filter((x) => !selectedIds.includes(x.id)),
     }));
@@ -5591,7 +5607,7 @@ function TasksModule({
     e.preventDefault();
     if (!form.title.trim()) return;
     if (editing) {
-      setState((prev) => ({
+      updateState((prev) => ({
         ...prev,
         tasks: prev.tasks.map((t) =>
           t.id === editing.id ? { ...t, ...form, ...stampUser(t) } : t
@@ -5606,7 +5622,7 @@ function TasksModule({
         ...form,
         ...stampUser(),
       };
-      setState((prev) => ({ ...prev, tasks: [...prev.tasks, created] }));
+      updateState((prev) => ({ ...prev, tasks: [...prev.tasks, created] }));
       recordAudit('Tasks', 'Created', `Assigned "${form.title}" to ${form.assignee}`);
       showToast('Task assigned');
     }
@@ -5614,14 +5630,14 @@ function TasksModule({
   };
 
   const handleDelete = (t) => {
-    setState((prev) => ({ ...prev, tasks: prev.tasks.filter((x) => x.id !== t.id) }));
+    updateState((prev) => ({ ...prev, tasks: prev.tasks.filter((x) => x.id !== t.id) }));
     recordAudit('Tasks', 'Deleted', `Deleted task "${t.title}"`);
     showToast('Task deleted');
     setDeleteTarget(null);
   };
 
   const handleBulkDelete = () => {
-    setState((prev) => ({
+    updateState((prev) => ({
       ...prev,
       tasks: prev.tasks.filter((x) => !selectedIds.includes(x.id)),
     }));
@@ -5898,7 +5914,7 @@ function TasksModule({
                           value={t.status}
                           onChange={(e) => {
                             const val = e.target.value;
-                            setState((prev) => ({
+                            updateState((prev) => ({
                               ...prev,
                               tasks: prev.tasks.map((item) =>
                                 item.id === t.id
@@ -6194,7 +6210,7 @@ function UsersAdminModule({
         : form.permissions;
 
     if (editingUser) {
-      setState((prev) => ({
+      updateState((prev) => ({
         ...prev,
         users: prev.users.map((u) =>
           u.id === editingUser.id
@@ -6218,7 +6234,7 @@ function UsersAdminModule({
         role: effectiveRole,
         permissions: effectivePerms,
       };
-      setState((prev) => ({ ...prev, users: [...prev.users, created] }));
+      updateState((prev) => ({ ...prev, users: [...prev.users, created] }));
       recordAudit('Users', 'Created', `Created user "${form.name}" (${effectiveRole})`);
       showToast('User account created');
     }
@@ -6227,7 +6243,7 @@ function UsersAdminModule({
 
   const handleDeleteUser = (u) => {
     if (u.id === 'user_super_admin' || u.id === currentUser.id) return;
-    setState((prev) => ({ ...prev, users: prev.users.filter((x) => x.id !== u.id) }));
+    updateState((prev) => ({ ...prev, users: prev.users.filter((x) => x.id !== u.id) }));
     recordAudit('Users', 'Deleted', `Deleted user "${u.name}"`);
     showToast('User removed');
     setDeleteTarget(null);
@@ -6747,7 +6763,7 @@ function BookingsModule({
       advancePaid: Number(form.advancePaid) || 0,
     };
     if (editing) {
-      setState((prev) => ({
+      updateState((prev) => ({
         ...prev,
         bookings: (prev.bookings || []).map((b) =>
           b.id === editing.id ? { ...b, ...payload, ...stampUser(b) } : b
@@ -6762,7 +6778,7 @@ function BookingsModule({
         ...payload,
         ...stampUser(),
       };
-      setState((prev) => ({ ...prev, bookings: [created, ...(prev.bookings || [])] }));
+      updateState((prev) => ({ ...prev, bookings: [created, ...(prev.bookings || [])] }));
       recordAudit('Bookings', 'Created', `Added booking "${payload.title}"`);
       showToast('Booking saved');
     }
@@ -6771,7 +6787,7 @@ function BookingsModule({
   };
 
   const handleDelete = (item) => {
-    setState((prev) => ({
+    updateState((prev) => ({
       ...prev,
       bookings: (prev.bookings || []).filter((x) => x.id !== item.id),
     }));
@@ -6781,7 +6797,7 @@ function BookingsModule({
   };
 
   const handleBulkDelete = () => {
-    setState((prev) => ({
+    updateState((prev) => ({
       ...prev,
       bookings: (prev.bookings || []).filter((x) => !selectedIds.includes(x.id)),
     }));
