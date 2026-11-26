@@ -1098,7 +1098,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#FAF8F5] text-stone-900 flex flex-col lg:flex-row">
       {/* DESKTOP SIDEBAR */}
-      <aside className="hidden lg:flex lg:w-68 lg:flex-col lg:fixed lg:inset-y-0 bg-white border-r border-stone-200/90 shadow-xs z-30">
+      <aside className="hidden lg:flex lg:w-64 lg:flex-col lg:fixed lg:inset-y-0 bg-white border-r border-stone-200/90 shadow-xs z-30">
         {/* Brand Header */}
         <div className="p-4 border-b border-stone-200/80 bg-gradient-to-br from-[#7A1C24] to-[#561117] text-white">
           <div className="flex items-center gap-3">
@@ -1236,7 +1236,7 @@ export default function App() {
       </aside>
 
       {/* MAIN CONTENT SHELL */}
-      <div className="flex-1 lg:pl-68 flex flex-col min-h-screen pb-20 lg:pb-0">
+      <div className="flex-1 lg:pl-64 flex flex-col min-h-screen pb-20 lg:pb-0">
         {/* TOP HEADER */}
         <header className="sticky top-0 z-20 bg-white/95 backdrop-blur-xs border-b border-stone-200 px-4 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
