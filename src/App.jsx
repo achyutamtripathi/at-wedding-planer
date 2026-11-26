@@ -692,7 +692,7 @@ function LoginScreen({ users = [], onLogin, cloudStatus }) {
                 autoComplete="username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter username"
+                placeholder="Username"
                 className="w-full px-3.5 py-2.5 border border-stone-300 rounded-xl text-sm focus:ring-2 focus:ring-[#7A1C24] focus:border-transparent"
               />
             </div>
@@ -705,7 +705,7 @@ function LoginScreen({ users = [], onLogin, cloudStatus }) {
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter password"
+                placeholder="Password"
                 className="w-full px-3.5 py-2.5 border border-stone-300 rounded-xl text-sm focus:ring-2 focus:ring-[#7A1C24] focus:border-transparent"
               />
             </div>
@@ -1683,7 +1683,7 @@ function WeddingFormModal({ isOpen, onClose, initialData, onSave }) {
             required
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g., Achyutam & Anjalee Wedding"
+            placeholder="Enter wedding title"
             className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
           />
         </div>
@@ -1693,7 +1693,7 @@ function WeddingFormModal({ isOpen, onClose, initialData, onSave }) {
             type="text"
             value={coupleNames}
             onChange={(e) => setCoupleNames(e.target.value)}
-            placeholder="e.g., Achyutam Tripathi & Anjalee"
+            placeholder="Enter couple names"
             className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
           />
         </div>
@@ -1715,7 +1715,7 @@ function WeddingFormModal({ isOpen, onClose, initialData, onSave }) {
               type="text"
               value={city}
               onChange={(e) => setCity(e.target.value)}
-              placeholder="e.g., Prayagraj / Ahmedabad"
+              placeholder="Enter city"
               className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
             />
           </div>
@@ -1726,7 +1726,7 @@ function WeddingFormModal({ isOpen, onClose, initialData, onSave }) {
             type="text"
             value={venue}
             onChange={(e) => setVenue(e.target.value)}
-            placeholder="e.g., Taj Skyline / Grand Lawn"
+            placeholder="Enter primary venue"
             className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
           />
         </div>
@@ -1921,7 +1921,7 @@ function ProfileSettingsModal({ isOpen, onClose, user, onSave }) {
             type="password"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
-            placeholder="Enter new password"
+            placeholder="New password"
             className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
           />
         </div>
@@ -2174,7 +2174,7 @@ function DashboardModule({
                   type="text"
                   value={logSearch}
                   onChange={(e) => setLogSearch(e.target.value)}
-                  placeholder="Search user or action..."
+                  placeholder="Search by user or action..."
                   className="pl-8 pr-3 py-1.5 border border-stone-300 rounded-lg text-xs"
                 />
               </div>
@@ -2443,7 +2443,7 @@ function EventsModule({ events, weddingId, perms, setState, stampUser, recordAud
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search event, venue, dress code..."
+            placeholder="Search events, venues, dress codes..."
             className="w-full pl-9 pr-3 py-2 border border-stone-300 rounded-xl text-xs"
           />
         </div>
@@ -2592,7 +2592,7 @@ function EventsModule({ events, weddingId, perms, setState, stampUser, recordAud
                           setNewChecklistText((prev) => ({ ...prev, [ev.id]: e.target.value }))
                         }
                         onKeyDown={(e) => e.key === 'Enter' && addChecklistItem(ev.id)}
-                        placeholder="Add ritual/prep item..."
+                        placeholder="Add checklist item..."
                         className="flex-1 px-2.5 py-1.5 border border-stone-300 rounded-lg text-xs"
                       />
                       <button
@@ -2629,7 +2629,7 @@ function EventsModule({ events, weddingId, perms, setState, stampUser, recordAud
             value={form.name}
             onChange={(val) => setForm({ ...form, name: val })}
             options={EVENT_PRESETS}
-            placeholder="Enter custom ceremony name..."
+            placeholder="Enter ceremony name"
           />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
@@ -2647,7 +2647,7 @@ function EventsModule({ events, weddingId, perms, setState, stampUser, recordAud
                 type="text"
                 value={form.time}
                 onChange={(e) => setForm({ ...form, time: e.target.value })}
-                placeholder="e.g., 10:30 AM"
+                placeholder="Enter event time"
                 className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
               />
             </div>
@@ -2659,7 +2659,7 @@ function EventsModule({ events, weddingId, perms, setState, stampUser, recordAud
                 type="text"
                 value={form.venue}
                 onChange={(e) => setForm({ ...form, venue: e.target.value })}
-                placeholder="Venue / Hall name"
+                placeholder="Enter venue or hall name"
                 className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
               />
             </div>
@@ -2668,7 +2668,7 @@ function EventsModule({ events, weddingId, perms, setState, stampUser, recordAud
               value={form.status}
               onChange={(val) => setForm({ ...form, status: val })}
               options={['Upcoming', 'Completed']}
-              placeholder="Specify custom status..."
+              placeholder="Enter status"
             />
           </div>
           <div>
@@ -2677,7 +2677,7 @@ function EventsModule({ events, weddingId, perms, setState, stampUser, recordAud
               type="text"
               value={form.dressCode}
               onChange={(e) => setForm({ ...form, dressCode: e.target.value })}
-              placeholder="e.g., Yellow & Floral Traditional"
+              placeholder="Enter dress code"
               className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
             />
           </div>
@@ -3258,7 +3258,7 @@ function GuestsModule({
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search guest name, phone, city, group..."
+              placeholder="Search guests by name, phone, city, or group..."
               className="w-full pl-9 pr-3 py-2 border border-stone-300 rounded-xl text-xs"
             />
           </div>
@@ -3546,14 +3546,14 @@ function GuestsModule({
               value={form.side}
               onChange={(val) => setForm({ ...form, side: val })}
               options={GUEST_SIDES}
-              placeholder="Specify custom side..."
+              placeholder="Enter side"
             />
             <DropdownWithOther
               label="Group / Relation"
               value={form.group}
               onChange={(val) => setForm({ ...form, group: val })}
               options={GUEST_GROUPS}
-              placeholder="Specify custom group..."
+              placeholder="Enter group"
             />
           </div>
 
@@ -3595,21 +3595,21 @@ function GuestsModule({
               value={form.accommodation}
               onChange={(val) => setForm({ ...form, accommodation: val })}
               options={['No', 'Yes']}
-              placeholder="Specify stay details..."
+              placeholder="Enter accommodation details"
             />
             <DropdownWithOther
               label="Card Status"
               value={form.cardStatus}
               onChange={(val) => setForm({ ...form, cardStatus: val })}
               options={CARD_STATUSES}
-              placeholder="Specify card status..."
+              placeholder="Enter card status"
             />
             <DropdownWithOther
               label="RSVP Status"
               value={form.rsvpStatus}
               onChange={(val) => setForm({ ...form, rsvpStatus: val })}
               options={RSVP_STATUSES}
-              placeholder="Specify RSVP status..."
+              placeholder="Enter RSVP status"
             />
           </div>
 
@@ -3917,7 +3917,7 @@ function InvitesMediaModule({
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search card title, ceremony, notes..."
+            placeholder="Search invites by title or ceremony..."
             className="w-full pl-9 pr-3 py-2 border border-stone-300 rounded-xl text-xs"
           />
         </div>
@@ -4077,7 +4077,7 @@ function InvitesMediaModule({
               required
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
-              placeholder="e.g., Main Wedding E-Card / Sangeet Video Invite"
+              placeholder="Enter invitation title"
               className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
             />
           </div>
@@ -4088,14 +4088,14 @@ function InvitesMediaModule({
               value={form.mediaType}
               onChange={(val) => setForm({ ...form, mediaType: val })}
               options={MEDIA_TYPES}
-              placeholder="Specify custom media type..."
+              placeholder="Enter media type"
             />
             <DropdownWithOther
               label="Ceremony / Tag"
               value={form.eventTag}
               onChange={(val) => setForm({ ...form, eventTag: val })}
               options={['All Events', ...EVENT_PRESETS]}
-              placeholder="Specify ceremony tag..."
+              placeholder="Enter ceremony tag"
             />
           </div>
 
@@ -4107,7 +4107,7 @@ function InvitesMediaModule({
               type="url"
               value={form.linkUrl}
               onChange={(e) => setForm({ ...form, linkUrl: e.target.value })}
-              placeholder="https://..."
+              placeholder="Enter URL link"
               className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
             />
           </div>
@@ -4397,7 +4397,7 @@ function MenuModule({ menu, weddingId, perms, setState, stampUser, recordAudit, 
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search dish name or notes..."
+            placeholder="Search dishes..."
             className="w-full pl-9 pr-3 py-2 border border-stone-300 rounded-xl text-xs"
           />
         </div>
@@ -4572,7 +4572,7 @@ function MenuModule({ menu, weddingId, perms, setState, stampUser, recordAudit, 
               required
               value={form.dishName}
               onChange={(e) => setForm({ ...form, dishName: e.target.value })}
-              placeholder="e.g., Paneer Lababdar / Gulab Jamun"
+              placeholder="Enter dish name"
               className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
             />
           </div>
@@ -4582,14 +4582,14 @@ function MenuModule({ menu, weddingId, perms, setState, stampUser, recordAudit, 
               value={form.event}
               onChange={(val) => setForm({ ...form, event: val })}
               options={MENU_EVENTS}
-              placeholder="Specify custom event..."
+              placeholder="Enter event name"
             />
             <DropdownWithOther
               label="Course"
               value={form.course}
               onChange={(val) => setForm({ ...form, course: val })}
               options={MENU_COURSES}
-              placeholder="Specify custom course..."
+              placeholder="Enter course name"
             />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -4598,14 +4598,14 @@ function MenuModule({ menu, weddingId, perms, setState, stampUser, recordAudit, 
               value={form.dietaryTag}
               onChange={(val) => setForm({ ...form, dietaryTag: val })}
               options={DIETARY_TAGS}
-              placeholder="Specify dietary preference..."
+              placeholder="Enter dietary tag"
             />
             <DropdownWithOther
               label="Selection Status"
               value={form.status}
               onChange={(val) => setForm({ ...form, status: val })}
               options={DISH_STATUSES}
-              placeholder="Specify status..."
+              placeholder="Enter status"
             />
           </div>
           <div>
@@ -4932,7 +4932,7 @@ function ExpensesModule({
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search description, vendor, category..."
+            placeholder="Search expenses, vendors, categories..."
             className="w-full pl-9 pr-3 py-2 border border-stone-300 rounded-xl text-xs"
           />
         </div>
@@ -5132,7 +5132,7 @@ function ExpensesModule({
                 required
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
-                placeholder="e.g., Stage Floral Decor Advance"
+                placeholder="Enter expense description"
                 className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
               />
             </div>
@@ -5141,7 +5141,7 @@ function ExpensesModule({
               value={form.category}
               onChange={(val) => setForm({ ...form, category: val })}
               options={EXPENSE_CATEGORIES}
-              placeholder="Specify custom category..."
+              placeholder="Enter category"
             />
           </div>
 
@@ -5188,14 +5188,14 @@ function ExpensesModule({
               value={form.paymentMode}
               onChange={(val) => setForm({ ...form, paymentMode: val })}
               options={PAYMENT_MODES}
-              placeholder="Specify payment mode..."
+              placeholder="Enter payment mode"
             />
             <DropdownWithOther
               label="Payment Status"
               value={form.paymentStatus}
               onChange={(val) => setForm({ ...form, paymentStatus: val })}
               options={PAYMENT_STATUSES}
-              placeholder="Specify payment status..."
+              placeholder="Enter payment status"
             />
             <div>
               <label className="block text-xs font-semibold text-stone-700 mb-1">Due Date</label>
@@ -5606,7 +5606,7 @@ function TasksModule({
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search task, person, department..."
+            placeholder="Search tasks, assignees, departments..."
             className="w-full pl-9 pr-3 py-2 border border-stone-300 rounded-xl text-xs"
           />
         </div>
@@ -5819,7 +5819,7 @@ function TasksModule({
               required
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
-              placeholder="e.g., Coordinate airport pickup for Baraat guests"
+              placeholder="Enter task description"
               className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
             />
           </div>
@@ -5830,14 +5830,14 @@ function TasksModule({
               value={form.assignee}
               onChange={(val) => setForm({ ...form, assignee: val })}
               options={memberOptions}
-              placeholder="Enter family member / coordinator name..."
+              placeholder="Enter assignee name"
             />
             <DropdownWithOther
               label="Linked Event"
               value={form.eventTag}
               onChange={(val) => setForm({ ...form, eventTag: val })}
               options={['All Events', ...EVENT_PRESETS]}
-              placeholder="Specify event..."
+              placeholder="Enter event name"
             />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -5846,14 +5846,14 @@ function TasksModule({
               value={form.department}
               onChange={(val) => setForm({ ...form, department: val })}
               options={TASK_DEPARTMENTS}
-              placeholder="Specify department..."
+              placeholder="Enter department"
             />
             <DropdownWithOther
               label="Priority"
               value={form.priority}
               onChange={(val) => setForm({ ...form, priority: val })}
               options={TASK_PRIORITIES}
-              placeholder="Specify priority..."
+              placeholder="Enter priority"
             />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -5871,7 +5871,7 @@ function TasksModule({
               value={form.status}
               onChange={(val) => setForm({ ...form, status: val })}
               options={TASK_STATUSES}
-              placeholder="Specify status..."
+              placeholder="Enter status"
             />
           </div>
           <div className="flex justify-end gap-2 pt-3 border-t border-stone-200">
@@ -6080,7 +6080,7 @@ function UsersAdminModule({
   };
 
   const handleDeleteUser = (u) => {
-    if (u.role === 'super_admin') return;
+    if (u.id === 'user_super_admin' || u.id === currentUser.id) return;
     setState((prev) => ({ ...prev, users: prev.users.filter((x) => x.id !== u.id) }));
     recordAudit('Users', 'Deleted', `Deleted user "${u.name}"`);
     showToast('User removed');
@@ -6174,7 +6174,7 @@ function UsersAdminModule({
                         >
                           <Edit2 size={14} />
                         </button>
-                        {u.role !== 'super_admin' && u.id !== currentUser.id && (
+                        {isSuperAdmin && u.id !== 'user_super_admin' && u.id !== currentUser.id && (
                           <button
                             onClick={() => setDeleteTarget(u)}
                             className="p-1.5 rounded-lg text-red-600 hover:bg-red-50"
@@ -6264,11 +6264,11 @@ function UsersAdminModule({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-stone-700 mb-1">Role</label>
-              {editingUser?.role === 'super_admin' ? (
+              {editingUser?.id === 'user_super_admin' ? (
                 <input
                   type="text"
                   disabled
-                  value="Super Admin"
+                  value="Super Admin (Primary)"
                   className="w-full px-3 py-2 border border-stone-200 bg-stone-100 rounded-lg text-sm"
                 />
               ) : (
@@ -6283,6 +6283,11 @@ function UsersAdminModule({
                       Sub-Admin (Full Access to Assigned Weddings, Cannot Add Weddings)
                     </option>
                   )}
+                  {isSuperAdmin && (
+                    <option value="super_admin">
+                      Super Admin (Full Control Across All Weddings & Users)
+                    </option>
+                  )}
                 </select>
               )}
             </div>
@@ -6292,7 +6297,7 @@ function UsersAdminModule({
                 Account Status
               </label>
               <select
-                disabled={editingUser?.role === 'super_admin'}
+                disabled={editingUser?.id === 'user_super_admin' || editingUser?.id === currentUser.id}
                 value={form.active ? 'active' : 'disabled'}
                 onChange={(e) => setForm({ ...form, active: e.target.value === 'active' })}
                 className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm bg-white"
