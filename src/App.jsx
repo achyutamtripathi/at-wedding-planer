@@ -2909,6 +2909,8 @@ function GuestsModule({
   const [cardFilter, setCardFilter] = useState('ALL');
   const [rsvpFilter, setRsvpFilter] = useState('ALL');
   const [stayFilter, setStayFilter] = useState('ALL');
+  const [cardReqFilter, setCardReqFilter] = useState('ALL');
+  const [moneyFilter, setMoneyFilter] = useState('ALL');
   const [sort, setSort] = useState({ key: 'fullName', dir: 'asc' });
 
   const [selectedIds, setSelectedIds] = useState([]);
@@ -2931,6 +2933,10 @@ function GuestsModule({
     city: '',
     adults: '',
     kids: '',
+    cardRequired: '',
+    moneyRequired: '',
+    moneyAmount: '',
+    moneyGiven: '',
     accommodation: '',
     cardStatus: '',
     rsvpStatus: '',
@@ -2944,6 +2950,10 @@ function GuestsModule({
     city: '',
     adults: 2,
     kids: 0,
+    cardRequired: false,
+    moneyRequired: false,
+    moneyAmount: '',
+    moneyGiven: false,
     accommodation: 'No',
     cardStatus: 'Not Sent',
     rsvpStatus: 'Pending',
@@ -2959,6 +2969,10 @@ function GuestsModule({
       city: '',
       adults: 2,
       kids: 0,
+      cardRequired: false,
+      moneyRequired: false,
+      moneyAmount: '',
+      moneyGiven: false,
       accommodation: 'No',
       cardStatus: 'Not Sent',
       rsvpStatus: 'Pending',
@@ -2976,6 +2990,10 @@ function GuestsModule({
       city: g.city || '',
       adults: g.adults ?? 1,
       kids: g.kids ?? 0,
+      cardRequired: Boolean(g.cardRequired),
+      moneyRequired: Boolean(g.moneyRequired),
+      moneyAmount: g.moneyAmount ?? '',
+      moneyGiven: Boolean(g.moneyGiven),
       accommodation: g.accommodation || 'No',
       cardStatus: g.cardStatus || 'Not Sent',
       rsvpStatus: g.rsvpStatus || 'Pending',
@@ -2986,6 +3004,15 @@ function GuestsModule({
   const handleSave = (e) => {
     e.preventDefault();
     if (!form.fullName.trim()) return;
+    const normalizedPayload = {
+      ...form,
+      adults: Number(form.adults) || 0,
+      kids: Number(form.kids) || 0,
+      cardRequired: Boolean(form.cardRequired),
+      moneyRequired: Boolean(form.moneyRequired),
+      moneyAmount: form.moneyRequired ? Number(form.moneyAmount) || 0 : 0,
+      moneyGiven: form.moneyRequired ? Boolean(form.moneyGiven) : false,
+    };
     if (editing) {
       setState((prev) => ({
         ...prev,
@@ -2993,9 +3020,7 @@ function GuestsModule({
           g.id === editing.id
             ? {
                 ...g,
-                ...form,
-                adults: Number(form.adults) || 0,
-                kids: Number(form.kids) || 0,
+                ...normalizedPayload,
                 ...stampUser(g),
               }
             : g
@@ -3007,9 +3032,7 @@ function GuestsModule({
       const created = {
         id: uid('gst'),
         weddingId: activeWedding.id,
-        ...form,
-        adults: Number(form.adults) || 0,
-        kids: Number(form.kids) || 0,
+        ...normalizedPayload,
         ...stampUser(),
       };
       setState((prev) => ({ ...prev, guests: [...prev.guests, created] }));
@@ -3042,13 +3065,23 @@ function GuestsModule({
     const target = guests.find((g) => g.id === guestId);
     setState((prev) => ({
       ...prev,
-      guests: prev.guests.map((g) =>
-        g.id === guestId ? { ...g, [field]: value, ...stampUser(g) } : g
-      ),
+      guests: prev.guests.map((g) => {
+        if (g.id !== guestId) return g;
+        const extra =
+          field === 'moneyRequired' && !value
+            ? { moneyAmount: 0, moneyGiven: false }
+            : {};
+        return { ...g, [field]: value, ...extra, ...stampUser(g) };
+      }),
     }));
     if (target) {
       recordAudit('Guests', 'Updated', `Updated ${field} to "${value}" for ${target.fullName}`);
     }
+  };
+
+  const parseBoolCell = (val) => {
+    const s = String(val ?? '').trim().toLowerCase();
+    return ['yes', 'true', '1', 'y', 'checked'].includes(s);
   };
 
   // CSV File Upload & Smart Column Auto-Match
@@ -3077,8 +3110,12 @@ function GuestsModule({
         city: findCol(['city', 'location', 'place']),
         adults: findCol(['adult', 'headcount', 'members', 'count']),
         kids: findCol(['kid', 'child']),
+        cardRequired: findCol(['card required', 'need card', 'give card']),
+        moneyRequired: findCol(['money applicable', 'need money', 'get money', 'money required']),
+        moneyAmount: findCol(['amount', 'money amount', 'shagun']),
+        moneyGiven: findCol(['money given', 'amount given', 'paid']),
         accommodation: findCol(['accommodation', 'stay', 'room', 'pickup']),
-        cardStatus: findCol(['card', 'invite']),
+        cardStatus: findCol(['card status', 'card', 'invite']),
         rsvpStatus: findCol(['rsvp', 'confirm', 'status']),
       });
       setCsvModalOpen(true);
@@ -3118,6 +3155,11 @@ function GuestsModule({
         return false;
       });
 
+      const resolvedMoneyRequired =
+        mapping.moneyRequired && row[mapping.moneyRequired] !== ''
+          ? parseBoolCell(row[mapping.moneyRequired])
+          : Boolean(matched?.moneyRequired);
+
       const nextData = {
         fullName: incomingName,
         phone: incomingPhone || matched?.phone || '',
@@ -3132,6 +3174,21 @@ function GuestsModule({
           mapping.kids && row[mapping.kids] !== ''
             ? Number(row[mapping.kids]) || 0
             : matched?.kids ?? 0,
+        cardRequired:
+          mapping.cardRequired && row[mapping.cardRequired] !== ''
+            ? parseBoolCell(row[mapping.cardRequired])
+            : Boolean(matched?.cardRequired),
+        moneyRequired: resolvedMoneyRequired,
+        moneyAmount: resolvedMoneyRequired
+          ? mapping.moneyAmount && row[mapping.moneyAmount] !== ''
+            ? Number(row[mapping.moneyAmount]) || 0
+            : Number(matched?.moneyAmount) || 0
+          : 0,
+        moneyGiven: resolvedMoneyRequired
+          ? mapping.moneyGiven && row[mapping.moneyGiven] !== ''
+            ? parseBoolCell(row[mapping.moneyGiven])
+            : Boolean(matched?.moneyGiven)
+          : false,
         accommodation:
           (mapping.accommodation && row[mapping.accommodation]?.trim()) ||
           matched?.accommodation ||
@@ -3155,6 +3212,10 @@ function GuestsModule({
           (matched.city || '') !== nextData.city ||
           Number(matched.adults) !== Number(nextData.adults) ||
           Number(matched.kids) !== Number(nextData.kids) ||
+          Boolean(matched.cardRequired) !== nextData.cardRequired ||
+          Boolean(matched.moneyRequired) !== nextData.moneyRequired ||
+          (Number(matched.moneyAmount) || 0) !== nextData.moneyAmount ||
+          Boolean(matched.moneyGiven) !== nextData.moneyGiven ||
           matched.accommodation !== nextData.accommodation ||
           matched.cardStatus !== nextData.cardStatus ||
           matched.rsvpStatus !== nextData.rsvpStatus;
@@ -3211,6 +3272,10 @@ function GuestsModule({
       'City',
       'Adults',
       'Kids',
+      'Card Required',
+      'Money Applicable',
+      'Amount',
+      'Money Given',
       'Accommodation',
       'Card Status',
       'RSVP Status',
@@ -3225,6 +3290,10 @@ function GuestsModule({
         City: 'Prayagraj',
         Adults: '2',
         Kids: '1',
+        'Card Required': 'Yes',
+        'Money Applicable': 'Yes',
+        Amount: '1100',
+        'Money Given': 'No',
         Accommodation: 'Yes',
         'Card Status': 'Not Sent',
         'RSVP Status': 'Pending',
@@ -3244,6 +3313,10 @@ function GuestsModule({
       'Adults',
       'Kids',
       'Total Headcount',
+      'Card Required',
+      'Money Applicable',
+      'Amount',
+      'Money Given',
       'Accommodation',
       'Card Status',
       'RSVP Status',
@@ -3258,6 +3331,10 @@ function GuestsModule({
       Adults: g.adults,
       Kids: g.kids,
       'Total Headcount': (Number(g.adults) || 0) + (Number(g.kids) || 0),
+      'Card Required': g.cardRequired ? 'Yes' : 'No',
+      'Money Applicable': g.moneyRequired ? 'Yes' : 'No',
+      Amount: g.moneyRequired ? Number(g.moneyAmount) || 0 : 0,
+      'Money Given': g.moneyRequired && g.moneyGiven ? 'Yes' : 'No',
       Accommodation: g.accommodation,
       'Card Status': g.cardStatus,
       'RSVP Status': g.rsvpStatus,
@@ -3266,11 +3343,15 @@ function GuestsModule({
   };
 
   const copyWhatsAppInvite = (g) => {
-    const msg = `Namaste ${g.fullName} Ji,\n\nWe warmly invite you and your family to the wedding celebrations of ${
+    const msg = `Namaste ${g.fullName} Ji,
+
+We warmly invite you and your family to the wedding celebrations of ${
       activeWedding.coupleNames || activeWedding.title
     }${activeWedding.date ? ` on ${activeWedding.date}` : ''}${
       activeWedding.city ? ` in ${activeWedding.city}` : ''
-    }.\n\nYour presence will make our celebration truly special!`;
+    }.
+
+Your presence will make our celebration truly special!`;
     navigator.clipboard.writeText(msg);
     setCopiedId(g.id);
     showToast(`Copied invite for ${g.fullName}`);
@@ -3296,6 +3377,12 @@ function GuestsModule({
         if (cardFilter !== 'ALL' && g.cardStatus !== cardFilter) return false;
         if (rsvpFilter !== 'ALL' && g.rsvpStatus !== rsvpFilter) return false;
         if (stayFilter !== 'ALL' && g.accommodation !== stayFilter) return false;
+        if (cardReqFilter === 'YES' && !g.cardRequired) return false;
+        if (cardReqFilter === 'NO' && Boolean(g.cardRequired)) return false;
+        if (moneyFilter === 'APPLICABLE' && !g.moneyRequired) return false;
+        if (moneyFilter === 'NOT_APPLICABLE' && Boolean(g.moneyRequired)) return false;
+        if (moneyFilter === 'PENDING' && (!g.moneyRequired || Boolean(g.moneyGiven))) return false;
+        if (moneyFilter === 'GIVEN' && (!g.moneyRequired || !g.moneyGiven)) return false;
         if (search.trim()) {
           const q = search.toLowerCase();
           return (
@@ -3313,6 +3400,20 @@ function GuestsModule({
           const hB = (Number(b.adults) || 0) + (Number(b.kids) || 0);
           return sort.dir === 'asc' ? hA - hB : hB - hA;
         }
+        if (sort.key === 'moneyAmount') {
+          const mA = a.moneyRequired ? Number(a.moneyAmount) || 0 : -1;
+          const mB = b.moneyRequired ? Number(b.moneyAmount) || 0 : -1;
+          return sort.dir === 'asc' ? mA - mB : mB - mA;
+        }
+        if (
+          sort.key === 'cardRequired' ||
+          sort.key === 'moneyRequired' ||
+          sort.key === 'moneyGiven'
+        ) {
+          const bA = a[sort.key] ? 1 : 0;
+          const bB = b[sort.key] ? 1 : 0;
+          return sort.dir === 'asc' ? bA - bB : bB - bA;
+        }
         const vA = String(a[sort.key] || '');
         const vB = String(b[sort.key] || '');
         return sort.dir === 'asc' ? vA.localeCompare(vB) : vB.localeCompare(vA);
@@ -3325,6 +3426,8 @@ function GuestsModule({
     cardFilter,
     rsvpFilter,
     stayFilter,
+    cardReqFilter,
+    moneyFilter,
     search,
     sort,
   ]);
@@ -3333,11 +3436,27 @@ function GuestsModule({
     (sum, g) => sum + (Number(g.adults) || 0) + (Number(g.kids) || 0),
     0
   );
-  const digitalSent = guests.filter((g) => g.cardStatus === 'Digital Invite Sent').length;
-  const physicalSent = guests.filter(
-    (g) => g.cardStatus === 'Physical Card Handed Over' || g.cardStatus === 'Couriered'
-  ).length;
+  const cardsNeededCount = guests.filter((g) => Boolean(g.cardRequired)).length;
+  const totalMoneyPlanned = guests.reduce(
+    (sum, g) => sum + (g.moneyRequired ? Number(g.moneyAmount) || 0 : 0),
+    0
+  );
+  const totalMoneyGiven = guests.reduce(
+    (sum, g) => sum + (g.moneyRequired && g.moneyGiven ? Number(g.moneyAmount) || 0 : 0),
+    0
+  );
   const confirmedCount = guests.filter((g) => g.rsvpStatus === 'Confirmed').length;
+
+  const hasActiveFilter =
+    search ||
+    sideFilter !== 'ALL' ||
+    groupFilter !== 'ALL' ||
+    cityFilter !== 'ALL' ||
+    cardFilter !== 'ALL' ||
+    rsvpFilter !== 'ALL' ||
+    stayFilter !== 'ALL' ||
+    cardReqFilter !== 'ALL' ||
+    moneyFilter !== 'ALL';
 
   return (
     <div className="space-y-5">
@@ -3346,7 +3465,7 @@ function GuestsModule({
         <div>
           <h2 className="text-xl font-bold text-stone-900">Guest List & Card Distribution</h2>
           <p className="text-xs text-stone-500">
-            Smart CSV import/update without duplicates, invitation tracking & RSVPs.
+            Smart CSV import/update without duplicates, card checklist, money tracking & RSVPs.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -3398,12 +3517,15 @@ function GuestsModule({
           <div className="text-lg font-bold text-[#7A1C24] mt-0.5">{totalHeadcount}</div>
         </div>
         <div className="bg-white rounded-xl border border-stone-200 p-3">
-          <div className="text-[11px] text-stone-500 font-semibold">Digital Invites</div>
-          <div className="text-lg font-bold text-blue-700 mt-0.5">{digitalSent}</div>
+          <div className="text-[11px] text-stone-500 font-semibold">Cards Required</div>
+          <div className="text-lg font-bold text-blue-700 mt-0.5">{cardsNeededCount}</div>
         </div>
         <div className="bg-white rounded-xl border border-stone-200 p-3">
-          <div className="text-[11px] text-stone-500 font-semibold">Physical / Courier</div>
-          <div className="text-lg font-bold text-amber-700 mt-0.5">{physicalSent}</div>
+          <div className="text-[11px] text-stone-500 font-semibold">Money Given / Total</div>
+          <div className="text-sm font-bold text-amber-800 mt-1">
+            {formatINR(totalMoneyGiven)}{' '}
+            <span className="text-stone-400 font-normal">/ {formatINR(totalMoneyPlanned)}</span>
+          </div>
         </div>
         <div className="bg-white rounded-xl border border-stone-200 p-3 col-span-2 sm:col-span-1">
           <div className="text-[11px] text-stone-500 font-semibold">RSVP Confirmed</div>
@@ -3461,6 +3583,26 @@ function GuestsModule({
             ))}
           </select>
           <select
+            value={cardReqFilter}
+            onChange={(e) => setCardReqFilter(e.target.value)}
+            className="px-2.5 py-2 border border-stone-300 rounded-xl text-xs bg-white"
+          >
+            <option value="ALL">Card Required: Any</option>
+            <option value="YES">Card Required: Yes</option>
+            <option value="NO">Card Required: No</option>
+          </select>
+          <select
+            value={moneyFilter}
+            onChange={(e) => setMoneyFilter(e.target.value)}
+            className="px-2.5 py-2 border border-stone-300 rounded-xl text-xs bg-white"
+          >
+            <option value="ALL">Money: Any</option>
+            <option value="APPLICABLE">Money Applicable: Yes</option>
+            <option value="NOT_APPLICABLE">Money Applicable: No</option>
+            <option value="PENDING">Money Pending (Not Given)</option>
+            <option value="GIVEN">Money Given</option>
+          </select>
+          <select
             value={cardFilter}
             onChange={(e) => setCardFilter(e.target.value)}
             className="px-2.5 py-2 border border-stone-300 rounded-xl text-xs bg-white"
@@ -3493,13 +3635,7 @@ function GuestsModule({
             <option value="Yes">Stay Needed: Yes</option>
             <option value="No">Stay Needed: No</option>
           </select>
-          {(search ||
-            sideFilter !== 'ALL' ||
-            groupFilter !== 'ALL' ||
-            cityFilter !== 'ALL' ||
-            cardFilter !== 'ALL' ||
-            rsvpFilter !== 'ALL' ||
-            stayFilter !== 'ALL') && (
+          {hasActiveFilter && (
             <button
               onClick={() => {
                 setSearch('');
@@ -3509,6 +3645,8 @@ function GuestsModule({
                 setCardFilter('ALL');
                 setRsvpFilter('ALL');
                 setStayFilter('ALL');
+                setCardReqFilter('ALL');
+                setMoneyFilter('ALL');
               }}
               className="text-xs font-semibold text-[#7A1C24] hover:underline"
             >
@@ -3540,6 +3678,10 @@ function GuestsModule({
                 <SortableHeader label="Side & Group" sortKey="side" currentSort={sort} onSort={handleSort} />
                 <SortableHeader label="City" sortKey="city" currentSort={sort} onSort={handleSort} />
                 <SortableHeader label="Headcount" sortKey="headcount" currentSort={sort} onSort={handleSort} align="center" />
+                <SortableHeader label="Card Req." sortKey="cardRequired" currentSort={sort} onSort={handleSort} align="center" />
+                <SortableHeader label="Money Req." sortKey="moneyRequired" currentSort={sort} onSort={handleSort} align="center" />
+                <SortableHeader label="Amount (₹)" sortKey="moneyAmount" currentSort={sort} onSort={handleSort} align="right" />
+                <SortableHeader label="Money Given" sortKey="moneyGiven" currentSort={sort} onSort={handleSort} align="center" />
                 <SortableHeader label="Card Status" sortKey="cardStatus" currentSort={sort} onSort={handleSort} />
                 <SortableHeader label="RSVP" sortKey="rsvpStatus" currentSort={sort} onSort={handleSort} />
                 <th className="px-3 py-3 text-xs font-semibold uppercase text-stone-600 text-right">
@@ -3550,13 +3692,14 @@ function GuestsModule({
             <tbody className="divide-y divide-stone-100 text-xs">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-stone-500">
+                  <td colSpan={12} className="px-4 py-10 text-center text-stone-500">
                     No guests found. Add guests manually or import your CSV file.
                   </td>
                 </tr>
               ) : (
                 filtered.map((g) => {
                   const total = (Number(g.adults) || 0) + (Number(g.kids) || 0);
+                  const isMoneyReq = Boolean(g.moneyRequired);
                   return (
                     <tr key={g.id} className="hover:bg-stone-50/70">
                       {perms.delete && (
@@ -3599,6 +3742,76 @@ function GuestsModule({
                           {g.adults}A + {g.kids}K
                         </div>
                       </td>
+
+                      {/* Column 1 after Headcount: Card Required Checkbox */}
+                      <td className="px-3 py-3 text-center">
+                        <input
+                          type="checkbox"
+                          disabled={!perms.update}
+                          checked={Boolean(g.cardRequired)}
+                          onChange={(e) =>
+                            quickUpdateField(g.id, 'cardRequired', e.target.checked)
+                          }
+                          title="Card Required"
+                          className="w-4 h-4 rounded border-stone-300 text-[#7A1C24] cursor-pointer"
+                        />
+                      </td>
+
+                      {/* Column 2 after Headcount: Money Applicable Checkbox */}
+                      <td className="px-3 py-3 text-center">
+                        <input
+                          type="checkbox"
+                          disabled={!perms.update}
+                          checked={isMoneyReq}
+                          onChange={(e) =>
+                            quickUpdateField(g.id, 'moneyRequired', e.target.checked)
+                          }
+                          title="Money / Shagun Applicable"
+                          className="w-4 h-4 rounded border-stone-300 text-[#7A1C24] cursor-pointer"
+                        />
+                      </td>
+
+                      {/* Column 3 after Headcount: Editable Amount (₹) when Money Applicable is checked */}
+                      <td className="px-3 py-3 text-right">
+                        {isMoneyReq ? (
+                          <input
+                            type="number"
+                            min="0"
+                            disabled={!perms.update}
+                            value={g.moneyAmount ?? ''}
+                            onChange={(e) =>
+                              quickUpdateField(
+                                g.id,
+                                'moneyAmount',
+                                e.target.value === '' ? '' : Number(e.target.value) || 0
+                              )
+                            }
+                            placeholder="0"
+                            className="w-24 px-2 py-1 border border-amber-300 bg-amber-50/40 rounded-lg text-xs text-right font-semibold text-stone-900 focus:ring-2 focus:ring-[#7A1C24]"
+                          />
+                        ) : (
+                          <span className="text-stone-300 select-none">—</span>
+                        )}
+                      </td>
+
+                      {/* Column 4 after Headcount: Money Given Checkbox */}
+                      <td className="px-3 py-3 text-center">
+                        {isMoneyReq ? (
+                          <input
+                            type="checkbox"
+                            disabled={!perms.update}
+                            checked={Boolean(g.moneyGiven)}
+                            onChange={(e) =>
+                              quickUpdateField(g.id, 'moneyGiven', e.target.checked)
+                            }
+                            title="Money Given"
+                            className="w-4 h-4 rounded border-stone-300 text-emerald-600 cursor-pointer"
+                          />
+                        ) : (
+                          <span className="text-stone-300 select-none">—</span>
+                        )}
+                      </td>
+
                       <td className="px-3 py-3">
                         <select
                           disabled={!perms.update}
@@ -3751,6 +3964,67 @@ function GuestsModule({
             </div>
           </div>
 
+          {/* Card Required & Money Tracking Controls */}
+          <div className="p-3.5 rounded-xl bg-amber-50/50 border border-amber-200/80 space-y-3">
+            <div className="flex flex-wrap items-center gap-6">
+              <label className="inline-flex items-center gap-2 text-xs font-semibold text-stone-800 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={Boolean(form.cardRequired)}
+                  onChange={(e) => setForm({ ...form, cardRequired: e.target.checked })}
+                  className="w-4 h-4 rounded border-stone-300 text-[#7A1C24]"
+                />
+                <span>Card Required (Need to give card)</span>
+              </label>
+
+              <label className="inline-flex items-center gap-2 text-xs font-semibold text-stone-800 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={Boolean(form.moneyRequired)}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      moneyRequired: e.target.checked,
+                      moneyAmount: e.target.checked ? form.moneyAmount : '',
+                      moneyGiven: e.target.checked ? form.moneyGiven : false,
+                    })
+                  }
+                  className="w-4 h-4 rounded border-stone-300 text-[#7A1C24]"
+                />
+                <span>Money Applicable</span>
+              </label>
+            </div>
+
+            {form.moneyRequired && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-amber-200/60">
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700 mb-1">
+                    Amount to Give (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={form.moneyAmount}
+                    onChange={(e) => setForm({ ...form, moneyAmount: e.target.value })}
+                    placeholder="Enter amount"
+                    className="w-full px-3 py-2 border border-stone-300 bg-white rounded-lg text-sm"
+                  />
+                </div>
+                <div className="flex items-end pb-2">
+                  <label className="inline-flex items-center gap-2 text-xs font-semibold text-emerald-800 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(form.moneyGiven)}
+                      onChange={(e) => setForm({ ...form, moneyGiven: e.target.checked })}
+                      className="w-4 h-4 rounded border-stone-300 text-emerald-600"
+                    />
+                    <span>Money Given</span>
+                  </label>
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <DropdownWithOther
               label="Accommodation"
@@ -3831,6 +4105,10 @@ function GuestsModule({
               { key: 'city', label: 'City' },
               { key: 'adults', label: 'Adults Count' },
               { key: 'kids', label: 'Kids Count' },
+              { key: 'cardRequired', label: 'Card Required (Yes/No)' },
+              { key: 'moneyRequired', label: 'Money Applicable (Yes/No)' },
+              { key: 'moneyAmount', label: 'Amount (₹)' },
+              { key: 'moneyGiven', label: 'Money Given (Yes/No)' },
               { key: 'accommodation', label: 'Accommodation' },
               { key: 'cardStatus', label: 'Card Status' },
               { key: 'rsvpStatus', label: 'RSVP Status' },
