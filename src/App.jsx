@@ -2459,7 +2459,7 @@ function EventsModule({ events, weddingId, perms, setState, stampUser, recordAud
     e.preventDefault();
     if (!form.name.trim()) return;
     if (editing) {
-      updateState((prev) => ({
+      setState((prev) => ({
         ...prev,
         events: prev.events.map((ev) =>
           ev.id === editing.id ? { ...ev, ...form, ...stampUser(ev) } : ev
@@ -2475,7 +2475,7 @@ function EventsModule({ events, weddingId, perms, setState, stampUser, recordAud
         checklist: [],
         ...stampUser(),
       };
-      updateState((prev) => ({ ...prev, events: [...prev.events, created] }));
+      setState((prev) => ({ ...prev, events: [...prev.events, created] }));
       recordAudit('Events', 'Created', `Added event "${form.name}"`);
       showToast('Event added');
     }
@@ -2483,14 +2483,14 @@ function EventsModule({ events, weddingId, perms, setState, stampUser, recordAud
   };
 
   const handleDelete = (ev) => {
-    updateState((prev) => ({ ...prev, events: prev.events.filter((x) => x.id !== ev.id) }));
+    setState((prev) => ({ ...prev, events: prev.events.filter((x) => x.id !== ev.id) }));
     recordAudit('Events', 'Deleted', `Deleted event "${ev.name}"`);
     showToast('Event deleted');
     setDeleteTarget(null);
   };
 
   const handleBulkDelete = () => {
-    updateState((prev) => ({
+    setState((prev) => ({
       ...prev,
       events: prev.events.filter((x) => !selectedIds.includes(x.id)),
     }));
@@ -2503,7 +2503,7 @@ function EventsModule({ events, weddingId, perms, setState, stampUser, recordAud
   const addChecklistItem = (eventId) => {
     const text = (newChecklistText[eventId] || '').trim();
     if (!text) return;
-    updateState((prev) => ({
+    setState((prev) => ({
       ...prev,
       events: prev.events.map((ev) =>
         ev.id === eventId
@@ -2520,7 +2520,7 @@ function EventsModule({ events, weddingId, perms, setState, stampUser, recordAud
 
   const toggleChecklistItem = (eventId, chkId) => {
     if (!perms.update) return;
-    updateState((prev) => ({
+    setState((prev) => ({
       ...prev,
       events: prev.events.map((ev) =>
         ev.id === eventId
@@ -2537,7 +2537,7 @@ function EventsModule({ events, weddingId, perms, setState, stampUser, recordAud
 
   const deleteChecklistItem = (eventId, chkId) => {
     if (!perms.update && !perms.delete) return;
-    updateState((prev) => ({
+    setState((prev) => ({
       ...prev,
       events: prev.events.map((ev) =>
         ev.id === eventId
@@ -2987,7 +2987,7 @@ function GuestsModule({
     e.preventDefault();
     if (!form.fullName.trim()) return;
     if (editing) {
-      updateState((prev) => ({
+      setState((prev) => ({
         ...prev,
         guests: prev.guests.map((g) =>
           g.id === editing.id
@@ -3012,7 +3012,7 @@ function GuestsModule({
         kids: Number(form.kids) || 0,
         ...stampUser(),
       };
-      updateState((prev) => ({ ...prev, guests: [...prev.guests, created] }));
+      setState((prev) => ({ ...prev, guests: [...prev.guests, created] }));
       recordAudit('Guests', 'Created', `Added guest "${form.fullName}"`);
       showToast('Guest added');
     }
@@ -3020,14 +3020,14 @@ function GuestsModule({
   };
 
   const handleDelete = (g) => {
-    updateState((prev) => ({ ...prev, guests: prev.guests.filter((x) => x.id !== g.id) }));
+    setState((prev) => ({ ...prev, guests: prev.guests.filter((x) => x.id !== g.id) }));
     recordAudit('Guests', 'Deleted', `Deleted guest "${g.fullName}"`);
     showToast('Guest deleted');
     setDeleteTarget(null);
   };
 
   const handleBulkDelete = () => {
-    updateState((prev) => ({
+    setState((prev) => ({
       ...prev,
       guests: prev.guests.filter((x) => !selectedIds.includes(x.id)),
     }));
@@ -3040,7 +3040,7 @@ function GuestsModule({
   const quickUpdateField = (guestId, field, value) => {
     if (!perms.update) return;
     const target = guests.find((g) => g.id === guestId);
-    updateState((prev) => ({
+    setState((prev) => ({
       ...prev,
       guests: prev.guests.map((g) =>
         g.id === guestId ? { ...g, [field]: value, ...stampUser(g) } : g
@@ -3178,7 +3178,7 @@ function GuestsModule({
 
   const confirmCSVUpsert = () => {
     const { toAdd, toUpdate } = upsertPreview;
-    updateState((prev) => {
+    setState((prev) => {
       const updateMap = new Map(toUpdate.map((u) => [u.existingId, u.data]));
       const updatedExisting = prev.guests.map((g) => {
         if (updateMap.has(g.id)) {
@@ -3973,7 +3973,7 @@ function InvitesMediaModule({
     e.preventDefault();
     if (!form.title.trim()) return;
     if (editing) {
-      updateState((prev) => ({
+      setState((prev) => ({
         ...prev,
         invites: prev.invites.map((it) =>
           it.id === editing.id ? { ...it, ...form, ...stampUser(it) } : it
@@ -3988,7 +3988,7 @@ function InvitesMediaModule({
         ...form,
         ...stampUser(),
       };
-      updateState((prev) => ({ ...prev, invites: [created, ...prev.invites] }));
+      setState((prev) => ({ ...prev, invites: [created, ...prev.invites] }));
       recordAudit('Invites & Media', 'Created', `Added invite "${form.title}"`);
       showToast('Invite media added');
     }
@@ -3996,7 +3996,7 @@ function InvitesMediaModule({
   };
 
   const handleDelete = (item) => {
-    updateState((prev) => ({ ...prev, invites: prev.invites.filter((x) => x.id !== item.id) }));
+    setState((prev) => ({ ...prev, invites: prev.invites.filter((x) => x.id !== item.id) }));
     recordAudit('Invites & Media', 'Deleted', `Deleted invite "${item.title}"`);
     showToast('Invite deleted');
     setDeleteTarget(null);
@@ -4452,7 +4452,7 @@ function MenuModule({ menu, weddingId, perms, setState, stampUser, recordAudit, 
     e.preventDefault();
     if (!form.dishName.trim()) return;
     if (editing) {
-      updateState((prev) => ({
+      setState((prev) => ({
         ...prev,
         menu: prev.menu.map((m) =>
           m.id === editing.id ? { ...m, ...form, ...stampUser(m) } : m
@@ -4467,7 +4467,7 @@ function MenuModule({ menu, weddingId, perms, setState, stampUser, recordAudit, 
         ...form,
         ...stampUser(),
       };
-      updateState((prev) => ({ ...prev, menu: [...prev.menu, created] }));
+      setState((prev) => ({ ...prev, menu: [...prev.menu, created] }));
       recordAudit('Menu', 'Created', `Added dish "${form.dishName}"`);
       showToast('Dish added to menu');
     }
@@ -4475,14 +4475,14 @@ function MenuModule({ menu, weddingId, perms, setState, stampUser, recordAudit, 
   };
 
   const handleDelete = (dish) => {
-    updateState((prev) => ({ ...prev, menu: prev.menu.filter((x) => x.id !== dish.id) }));
+    setState((prev) => ({ ...prev, menu: prev.menu.filter((x) => x.id !== dish.id) }));
     recordAudit('Menu', 'Deleted', `Deleted dish "${dish.dishName}"`);
     showToast('Dish deleted');
     setDeleteTarget(null);
   };
 
   const handleBulkDelete = () => {
-    updateState((prev) => ({
+    setState((prev) => ({
       ...prev,
       menu: prev.menu.filter((x) => !selectedIds.includes(x.id)),
     }));
@@ -4946,7 +4946,7 @@ function ExpensesModule({
       advancePaid: Number(form.advancePaid) || 0,
     };
     if (editing) {
-      updateState((prev) => ({
+      setState((prev) => ({
         ...prev,
         expenses: prev.expenses.map((x) =>
           x.id === editing.id ? { ...x, ...payload, ...stampUser(x) } : x
@@ -4965,7 +4965,7 @@ function ExpensesModule({
         ...payload,
         ...stampUser(),
       };
-      updateState((prev) => ({ ...prev, expenses: [...prev.expenses, created] }));
+      setState((prev) => ({ ...prev, expenses: [...prev.expenses, created] }));
       recordAudit(
         'Expenses',
         'Created',
@@ -4978,14 +4978,14 @@ function ExpensesModule({
   };
 
   const handleDelete = (item) => {
-    updateState((prev) => ({ ...prev, expenses: prev.expenses.filter((x) => x.id !== item.id) }));
+    setState((prev) => ({ ...prev, expenses: prev.expenses.filter((x) => x.id !== item.id) }));
     recordAudit('Expenses', 'Deleted', `Deleted expense "${item.description}"`);
     showToast('Expense deleted');
     setDeleteTarget(null);
   };
 
   const handleBulkDelete = () => {
-    updateState((prev) => ({
+    setState((prev) => ({
       ...prev,
       expenses: prev.expenses.filter((x) => !selectedIds.includes(x.id)),
     }));
@@ -5607,7 +5607,7 @@ function TasksModule({
     e.preventDefault();
     if (!form.title.trim()) return;
     if (editing) {
-      updateState((prev) => ({
+      setState((prev) => ({
         ...prev,
         tasks: prev.tasks.map((t) =>
           t.id === editing.id ? { ...t, ...form, ...stampUser(t) } : t
@@ -5622,7 +5622,7 @@ function TasksModule({
         ...form,
         ...stampUser(),
       };
-      updateState((prev) => ({ ...prev, tasks: [...prev.tasks, created] }));
+      setState((prev) => ({ ...prev, tasks: [...prev.tasks, created] }));
       recordAudit('Tasks', 'Created', `Assigned "${form.title}" to ${form.assignee}`);
       showToast('Task assigned');
     }
@@ -5630,14 +5630,14 @@ function TasksModule({
   };
 
   const handleDelete = (t) => {
-    updateState((prev) => ({ ...prev, tasks: prev.tasks.filter((x) => x.id !== t.id) }));
+    setState((prev) => ({ ...prev, tasks: prev.tasks.filter((x) => x.id !== t.id) }));
     recordAudit('Tasks', 'Deleted', `Deleted task "${t.title}"`);
     showToast('Task deleted');
     setDeleteTarget(null);
   };
 
   const handleBulkDelete = () => {
-    updateState((prev) => ({
+    setState((prev) => ({
       ...prev,
       tasks: prev.tasks.filter((x) => !selectedIds.includes(x.id)),
     }));
@@ -5914,7 +5914,7 @@ function TasksModule({
                           value={t.status}
                           onChange={(e) => {
                             const val = e.target.value;
-                            updateState((prev) => ({
+                            setState((prev) => ({
                               ...prev,
                               tasks: prev.tasks.map((item) =>
                                 item.id === t.id
@@ -6210,7 +6210,7 @@ function UsersAdminModule({
         : form.permissions;
 
     if (editingUser) {
-      updateState((prev) => ({
+      setState((prev) => ({
         ...prev,
         users: prev.users.map((u) =>
           u.id === editingUser.id
@@ -6234,7 +6234,7 @@ function UsersAdminModule({
         role: effectiveRole,
         permissions: effectivePerms,
       };
-      updateState((prev) => ({ ...prev, users: [...prev.users, created] }));
+      setState((prev) => ({ ...prev, users: [...prev.users, created] }));
       recordAudit('Users', 'Created', `Created user "${form.name}" (${effectiveRole})`);
       showToast('User account created');
     }
@@ -6243,7 +6243,7 @@ function UsersAdminModule({
 
   const handleDeleteUser = (u) => {
     if (u.id === 'user_super_admin' || u.id === currentUser.id) return;
-    updateState((prev) => ({ ...prev, users: prev.users.filter((x) => x.id !== u.id) }));
+    setState((prev) => ({ ...prev, users: prev.users.filter((x) => x.id !== u.id) }));
     recordAudit('Users', 'Deleted', `Deleted user "${u.name}"`);
     showToast('User removed');
     setDeleteTarget(null);
@@ -6763,7 +6763,7 @@ function BookingsModule({
       advancePaid: Number(form.advancePaid) || 0,
     };
     if (editing) {
-      updateState((prev) => ({
+      setState((prev) => ({
         ...prev,
         bookings: (prev.bookings || []).map((b) =>
           b.id === editing.id ? { ...b, ...payload, ...stampUser(b) } : b
@@ -6778,7 +6778,7 @@ function BookingsModule({
         ...payload,
         ...stampUser(),
       };
-      updateState((prev) => ({ ...prev, bookings: [created, ...(prev.bookings || [])] }));
+      setState((prev) => ({ ...prev, bookings: [created, ...(prev.bookings || [])] }));
       recordAudit('Bookings', 'Created', `Added booking "${payload.title}"`);
       showToast('Booking saved');
     }
@@ -6787,7 +6787,7 @@ function BookingsModule({
   };
 
   const handleDelete = (item) => {
-    updateState((prev) => ({
+    setState((prev) => ({
       ...prev,
       bookings: (prev.bookings || []).filter((x) => x.id !== item.id),
     }));
@@ -6797,7 +6797,7 @@ function BookingsModule({
   };
 
   const handleBulkDelete = () => {
-    updateState((prev) => ({
+    setState((prev) => ({
       ...prev,
       bookings: (prev.bookings || []).filter((x) => !selectedIds.includes(x.id)),
     }));
