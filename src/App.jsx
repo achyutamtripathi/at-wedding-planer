@@ -3,6 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 import {
   LayoutDashboard,
   Calendar,
+  BookmarkCheck,
+  PhoneCall,
   Users,
   Utensils,
   Wallet,
@@ -168,6 +170,7 @@ const STORAGE_KEY = 'at_wedding_planner_stable_v1';
 const MODULES = [
   { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { key: 'events', label: 'Events', icon: Calendar },
+  { key: 'bookings', label: 'Bookings', icon: BookmarkCheck },
   { key: 'guests', label: 'Guests & Cards', icon: Users },
   { key: 'invites', label: 'Invites & Media', icon: FileImage },
   { key: 'menu', label: 'Menu List', icon: Utensils },
@@ -184,6 +187,29 @@ const EVENT_PRESETS = [
   'Baraat & Wedding Ceremony',
   'Vidaai',
   'Reception',
+];
+
+const BOOKING_CATEGORIES = [
+  'Venue & Banquet Hall',
+  'Catering & Halwai',
+  'Tent, Lighting & Decor',
+  'Photography & Videography',
+  'DJ, Sound & Entertainment',
+  'Pandit & Rituals',
+  'Makeup & Mehendi Artist',
+  'Band, Ghodi & Dhol',
+  'Hotel & Guest Accommodation',
+  'Transport & Luxury Cars',
+  'Travel & Tickets',
+  'Jewellery & Attire',
+  'Miscellaneous',
+];
+const BOOKING_STATUSES = [
+  'Confirmed',
+  'Token Paid',
+  'Enquiry / Hold',
+  'Completed',
+  'Cancelled',
 ];
 
 const GUEST_SIDES = ["Groom's Side", "Bride's Side", 'Mutual'];
@@ -277,6 +303,7 @@ const DEFAULT_STATE = {
   activeWeddingId: '',
   users: DEFAULT_USERS,
   events: [],
+  bookings: [],
   guests: [],
   invites: [],
   menu: [],
@@ -743,6 +770,7 @@ export default function App() {
             ...parsed,
             weddings: Array.isArray(parsed.weddings) ? parsed.weddings : [],
             events: Array.isArray(parsed.events) ? parsed.events : [],
+            bookings: Array.isArray(parsed.bookings) ? parsed.bookings : [],
             guests: Array.isArray(parsed.guests) ? parsed.guests : [],
             invites: Array.isArray(parsed.invites) ? parsed.invites : [],
             menu: Array.isArray(parsed.menu) ? parsed.menu : [],
@@ -1022,6 +1050,7 @@ export default function App() {
         weddings: remaining,
         activeWeddingId: prev.activeWeddingId === targetId ? remaining[0]?.id || '' : prev.activeWeddingId,
         events: prev.events.filter((e) => e.weddingId !== targetId),
+        bookings: (prev.bookings || []).filter((b) => b.weddingId !== targetId),
         guests: prev.guests.filter((g) => g.weddingId !== targetId),
         invites: prev.invites.filter((i) => i.weddingId !== targetId),
         menu: prev.menu.filter((m) => m.weddingId !== targetId),
@@ -1059,6 +1088,7 @@ export default function App() {
 
   // Scoped records for active wedding
   const weddingEvents = state.events.filter((e) => e.weddingId === activeWedding?.id);
+  const weddingBookings = (state.bookings || []).filter((b) => b.weddingId === activeWedding?.id);
   const weddingGuests = state.guests.filter((g) => g.weddingId === activeWedding?.id);
   const weddingInvites = state.invites.filter((i) => i.weddingId === activeWedding?.id);
   const weddingMenu = state.menu.filter((m) => m.weddingId === activeWedding?.id);
@@ -1453,6 +1483,7 @@ export default function App() {
                 <DashboardModule
                   activeWedding={activeWedding}
                   events={weddingEvents}
+                  bookings={weddingBookings}
                   guests={weddingGuests}
                   invites={weddingInvites}
                   menu={weddingMenu}
@@ -1468,6 +1499,17 @@ export default function App() {
                   events={weddingEvents}
                   weddingId={activeWedding.id}
                   perms={getModulePerms('events')}
+                  setState={setState}
+                  stampUser={stampUser}
+                  recordAudit={recordAudit}
+                  showToast={showToast}
+                />
+              )}
+              {activeTab === 'bookings' && (
+                <BookingsModule
+                  bookings={weddingBookings}
+                  weddingId={activeWedding.id}
+                  perms={getModulePerms('bookings')}
                   setState={setState}
                   stampUser={stampUser}
                   recordAudit={recordAudit}
@@ -1535,8 +1577,8 @@ export default function App() {
         </main>
 
         {/* MOBILE BOTTOM NAVIGATION */}
-        <nav className="lg:hidden fixed bottom-0 inset-x-0 bg-white border-t border-stone-200 flex justify-around py-1.5 z-30">
-          {visibleModules.slice(0, 5).map((mod) => {
+        <nav className="lg:hidden fixed bottom-0 inset-x-0 bg-white border-t border-stone-200 flex items-center justify-between overflow-x-auto px-1 py-1.5 z-30">
+          {visibleModules.map((mod) => {
             const Icon = mod.icon;
             const active = activeTab === mod.key;
             return (
@@ -1952,6 +1994,7 @@ function ProfileSettingsModal({ isOpen, onClose, user, onSave }) {
 function DashboardModule({
   activeWedding,
   events,
+  bookings = [],
   guests,
   invites,
   menu,
@@ -2068,8 +2111,8 @@ function DashboardModule({
             {events.length} <span className="text-xs font-normal text-stone-500">Events</span>
           </div>
           <div className="mt-2 flex items-center justify-between text-xs text-stone-600">
-            <span>Invite Assets: {invites.length}</span>
-            <span>Menu Dishes: {menu.length}</span>
+            <span>Bookings: {bookings.length}</span>
+            <span>Invites: {invites.length} • Menu: {menu.length}</span>
           </div>
         </div>
       </div>
@@ -2186,6 +2229,7 @@ function DashboardModule({
                 <option value="ALL">All Modules</option>
                 <option value="Weddings">Weddings</option>
                 <option value="Events">Events</option>
+                <option value="Bookings">Bookings</option>
                 <option value="Guests">Guests</option>
                 <option value="Invites & Media">Invites & Media</option>
                 <option value="Menu">Menu</option>
@@ -6449,6 +6493,878 @@ function UsersAdminModule({
         message={`Delete user "${deleteTarget?.name}"?`}
         onConfirm={() => handleDeleteUser(deleteTarget)}
         onCancel={() => setDeleteTarget(null)}
+      />
+    </div>
+  );
+}
+
+
+// ==========================================
+// MODULE: VENDOR & SERVICE BOOKINGS (WITH PHONE & BILL PHOTOS)
+// ==========================================
+function BookingsModule({
+  bookings,
+  weddingId,
+  perms,
+  setState,
+  stampUser,
+  recordAudit,
+  showToast,
+}) {
+  const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [sort, setSort] = useState({ key: 'serviceDate', dir: 'asc' });
+
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
+
+  // Bill Photo Camera & Gallery Lightbox
+  const [webcamOpen, setWebcamOpen] = useState(false);
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const [lightboxPhotos, setLightboxPhotos] = useState(null);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+
+  const [form, setForm] = useState({
+    title: '',
+    category: 'Venue & Banquet Hall',
+    vendorName: '',
+    phone: '',
+    altPhone: '',
+    location: '',
+    eventTag: 'All Events',
+    bookingDate: '',
+    serviceDate: '',
+    status: 'Confirmed',
+    totalAmount: '',
+    advancePaid: '',
+    paymentMode: 'UPI',
+    notes: '',
+    bills: [],
+  });
+
+  const openAdd = () => {
+    setEditing(null);
+    setForm({
+      title: '',
+      category: 'Venue & Banquet Hall',
+      vendorName: '',
+      phone: '',
+      altPhone: '',
+      location: '',
+      eventTag: 'All Events',
+      bookingDate: new Date().toISOString().slice(0, 10),
+      serviceDate: '',
+      status: 'Confirmed',
+      totalAmount: '',
+      advancePaid: '',
+      paymentMode: 'UPI',
+      notes: '',
+      bills: [],
+    });
+    setModalOpen(true);
+  };
+
+  const openEdit = (item) => {
+    setEditing(item);
+    setForm({
+      title: item.title || '',
+      category: item.category || 'Venue & Banquet Hall',
+      vendorName: item.vendorName || '',
+      phone: item.phone || '',
+      altPhone: item.altPhone || '',
+      location: item.location || '',
+      eventTag: item.eventTag || 'All Events',
+      bookingDate: item.bookingDate || '',
+      serviceDate: item.serviceDate || '',
+      status: item.status || 'Confirmed',
+      totalAmount: item.totalAmount ?? '',
+      advancePaid: item.advancePaid ?? '',
+      paymentMode: item.paymentMode || 'UPI',
+      notes: item.notes || '',
+      bills: Array.isArray(item.bills) ? item.bills : [],
+    });
+    setModalOpen(true);
+  };
+
+  const handleBillFiles = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    const compressedList = await Promise.all(
+      files.map((f) => compressImageFile(f, 900, 0.72))
+    );
+    setForm((prev) => ({ ...prev, bills: [...prev.bills, ...compressedList] }));
+    e.target.value = '';
+  };
+
+  const startWebcam = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' },
+      });
+      streamRef.current = stream;
+      setWebcamOpen(true);
+      setTimeout(() => {
+        if (videoRef.current) videoRef.current.srcObject = stream;
+      }, 100);
+    } catch {
+      showToast('Camera access unavailable; use Mobile Camera or Upload Photos instead', 'error');
+    }
+  };
+
+  const stopWebcam = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    setWebcamOpen(false);
+  };
+
+  const captureWebcamPhoto = () => {
+    if (!videoRef.current) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = videoRef.current.videoWidth || 640;
+    canvas.height = videoRef.current.videoHeight || 480;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
+    setForm((prev) => ({ ...prev, bills: [...prev.bills, dataUrl] }));
+    showToast('Bill photo captured!');
+  };
+
+  const handleSave = (e) => {
+    e.preventDefault();
+    if (!form.title.trim()) return;
+    const payload = {
+      ...form,
+      totalAmount: Number(form.totalAmount) || 0,
+      advancePaid: Number(form.advancePaid) || 0,
+    };
+    if (editing) {
+      setState((prev) => ({
+        ...prev,
+        bookings: (prev.bookings || []).map((b) =>
+          b.id === editing.id ? { ...b, ...payload, ...stampUser(b) } : b
+        ),
+      }));
+      recordAudit('Bookings', 'Updated', `Updated booking "${payload.title}"`);
+      showToast('Booking updated');
+    } else {
+      const created = {
+        id: uid('bkg'),
+        weddingId,
+        ...payload,
+        ...stampUser(),
+      };
+      setState((prev) => ({ ...prev, bookings: [created, ...(prev.bookings || [])] }));
+      recordAudit('Bookings', 'Created', `Added booking "${payload.title}"`);
+      showToast('Booking saved');
+    }
+    stopWebcam();
+    setModalOpen(false);
+  };
+
+  const handleDelete = (item) => {
+    setState((prev) => ({
+      ...prev,
+      bookings: (prev.bookings || []).filter((x) => x.id !== item.id),
+    }));
+    recordAudit('Bookings', 'Deleted', `Deleted booking "${item.title}"`);
+    showToast('Booking deleted');
+    setDeleteTarget(null);
+  };
+
+  const handleBulkDelete = () => {
+    setState((prev) => ({
+      ...prev,
+      bookings: (prev.bookings || []).filter((x) => !selectedIds.includes(x.id)),
+    }));
+    recordAudit('Bookings', 'Deleted', `Bulk deleted ${selectedIds.length} bookings`);
+    showToast(`Deleted ${selectedIds.length} bookings`);
+    setSelectedIds([]);
+    setBulkDeleteConfirm(false);
+  };
+
+  const handleSort = (key) => {
+    setSort((prev) =>
+      prev.key === key ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }
+    );
+  };
+
+  const filtered = useMemo(() => {
+    return bookings
+      .filter((b) => {
+        if (categoryFilter !== 'ALL' && b.category !== categoryFilter) return false;
+        if (statusFilter !== 'ALL' && b.status !== statusFilter) return false;
+        if (search.trim()) {
+          const q = search.toLowerCase();
+          return (
+            (b.title || '').toLowerCase().includes(q) ||
+            (b.vendorName || '').toLowerCase().includes(q) ||
+            (b.phone || '').toLowerCase().includes(q) ||
+            (b.location || '').toLowerCase().includes(q) ||
+            (b.category || '').toLowerCase().includes(q)
+          );
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        if (sort.key === 'totalAmount' || sort.key === 'advancePaid') {
+          return sort.dir === 'asc'
+            ? (Number(a[sort.key]) || 0) - (Number(b[sort.key]) || 0)
+            : (Number(b[sort.key]) || 0) - (Number(a[sort.key]) || 0);
+        }
+        const vA = String(a[sort.key] || '');
+        const vB = String(b[sort.key] || '');
+        return sort.dir === 'asc' ? vA.localeCompare(vB) : vB.localeCompare(vA);
+      });
+  }, [bookings, categoryFilter, statusFilter, search, sort]);
+
+  const confirmedCount = bookings.filter(
+    (b) => b.status === 'Confirmed' || b.status === 'Token Paid' || b.status === 'Completed'
+  ).length;
+  const totalValue = bookings.reduce((sum, b) => sum + (Number(b.totalAmount) || 0), 0);
+  const totalPaid = bookings.reduce((sum, b) => sum + (Number(b.advancePaid) || 0), 0);
+  const totalDue = bookings.reduce(
+    (sum, b) => sum + Math.max(0, (Number(b.totalAmount) || 0) - (Number(b.advancePaid) || 0)),
+    0
+  );
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold text-stone-900">Vendor & Service Bookings</h2>
+          <p className="text-xs text-stone-500">
+            Store all vendor bookings, contact numbers, locations, payment terms & bill photos.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {perms.delete && selectedIds.length > 0 && (
+            <button
+              onClick={() => setBulkDeleteConfirm(true)}
+              className="px-3.5 py-2 rounded-xl bg-red-600 text-white text-xs font-semibold flex items-center gap-1.5"
+            >
+              <Trash2 size={14} /> Delete ({selectedIds.length})
+            </button>
+          )}
+          {perms.add && (
+            <button
+              onClick={openAdd}
+              className="px-4 py-2.5 rounded-xl bg-[#7A1C24] text-white text-xs font-semibold flex items-center gap-1.5 shadow-sm hover:bg-[#5E141B]"
+            >
+              <Plus size={16} /> Add Booking
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Summary KPIs */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="bg-white rounded-2xl border border-stone-200 p-4">
+          <div className="text-xs font-semibold text-stone-500">Total Bookings</div>
+          <div className="text-2xl font-bold text-stone-900 mt-1">
+            {bookings.length}{' '}
+            <span className="text-xs font-normal text-emerald-700">({confirmedCount} Active)</span>
+          </div>
+        </div>
+        <div className="bg-white rounded-2xl border border-stone-200 p-4">
+          <div className="text-xs font-semibold text-stone-500">Total Booking Value</div>
+          <div className="text-2xl font-bold text-stone-900 mt-1">{formatINR(totalValue)}</div>
+        </div>
+        <div className="bg-white rounded-2xl border border-stone-200 p-4">
+          <div className="text-xs font-semibold text-stone-500">Advance Paid</div>
+          <div className="text-2xl font-bold text-emerald-700 mt-1">{formatINR(totalPaid)}</div>
+        </div>
+        <div className="bg-white rounded-2xl border border-stone-200 p-4">
+          <div className="text-xs font-semibold text-stone-500">Balance Due</div>
+          <div className="text-2xl font-bold text-amber-700 mt-1">{formatINR(totalDue)}</div>
+        </div>
+      </div>
+
+      {/* Filter & Sort Bar */}
+      <div className="bg-white rounded-2xl border border-stone-200 p-3.5 flex flex-wrap items-center gap-2.5">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search bookings, vendors, phone numbers, locations..."
+            className="w-full pl-9 pr-3 py-2 border border-stone-300 rounded-xl text-xs"
+          />
+        </div>
+        <select
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value)}
+          className="px-2.5 py-2 border border-stone-300 rounded-xl text-xs bg-white"
+        >
+          <option value="ALL">All Categories</option>
+          {BOOKING_CATEGORIES.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="px-2.5 py-2 border border-stone-300 rounded-xl text-xs bg-white"
+        >
+          <option value="ALL">All Statuses</option>
+          {BOOKING_STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+        {(search || categoryFilter !== 'ALL' || statusFilter !== 'ALL') && (
+          <button
+            onClick={() => {
+              setSearch('');
+              setCategoryFilter('ALL');
+              setStatusFilter('ALL');
+            }}
+            className="text-xs font-semibold text-[#7A1C24] hover:underline"
+          >
+            Reset
+          </button>
+        )}
+      </div>
+
+      {/* Bookings Table */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-xs overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead className="bg-stone-50 border-b border-stone-200">
+              <tr>
+                {perms.delete && (
+                  <th className="px-3 py-3 w-8">
+                    <input
+                      type="checkbox"
+                      checked={filtered.length > 0 && selectedIds.length === filtered.length}
+                      onChange={(e) =>
+                        setSelectedIds(e.target.checked ? filtered.map((b) => b.id) : [])
+                      }
+                      className="rounded border-stone-300"
+                    />
+                  </th>
+                )}
+                <SortableHeader label="Booking & Vendor" sortKey="title" currentSort={sort} onSort={handleSort} />
+                <SortableHeader label="Contact & Location" sortKey="phone" currentSort={sort} onSort={handleSort} />
+                <SortableHeader label="Event & Date" sortKey="serviceDate" currentSort={sort} onSort={handleSort} />
+                <SortableHeader label="Amount & Due" sortKey="totalAmount" currentSort={sort} onSort={handleSort} align="right" />
+                <SortableHeader label="Status" sortKey="status" currentSort={sort} onSort={handleSort} />
+                <th className="px-3 py-3 text-xs font-semibold uppercase text-stone-600 text-center">
+                  Bill Photos
+                </th>
+                <th className="px-3 py-3 text-xs font-semibold uppercase text-stone-600 text-right">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-stone-100 text-xs">
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-10 text-center text-stone-500">
+                    No bookings recorded yet. {perms.add && 'Click "+ Add Booking" to log your first vendor booking.'}
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((item) => {
+                  const balance = Math.max(
+                    0,
+                    (Number(item.totalAmount) || 0) - (Number(item.advancePaid) || 0)
+                  );
+                  const billCount = Array.isArray(item.bills) ? item.bills.length : 0;
+                  const cleanPhone = String(item.phone || '').replace(/\D/g, '');
+                  return (
+                    <tr key={item.id} className="hover:bg-stone-50/70">
+                      {perms.delete && (
+                        <td className="px-3 py-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(item.id)}
+                            onChange={(e) =>
+                              setSelectedIds((prev) =>
+                                e.target.checked
+                                  ? [...prev, item.id]
+                                  : prev.filter((id) => id !== item.id)
+                              )
+                            }
+                            className="rounded border-stone-300"
+                          />
+                        </td>
+                      )}
+                      <td className="px-3 py-3">
+                        <div className="font-bold text-stone-900">{item.title}</div>
+                        <div className="text-[11px] text-stone-600">
+                          {item.vendorName ? `${item.vendorName} • ` : ''}
+                          <span className="text-stone-500">{item.category}</span>
+                        </div>
+                        {item.notes && (
+                          <div className="text-[11px] text-stone-400 line-clamp-1 mt-0.5">
+                            {item.notes}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-3 py-3">
+                        {item.phone ? (
+                          <div className="flex items-center gap-1.5">
+                            <a
+                              href={`tel:${item.phone}`}
+                              className="inline-flex items-center gap-1 font-semibold text-[#7A1C24] hover:underline"
+                              title="Call Vendor"
+                            >
+                              <PhoneCall size={11} /> {item.phone}
+                            </a>
+                            {cleanPhone.length >= 10 && (
+                              <a
+                                href={`https://wa.me/${cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-semibold hover:bg-emerald-100"
+                                title="Chat on WhatsApp"
+                              >
+                                WA
+                              </a>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-stone-400">No phone</span>
+                        )}
+                        {item.altPhone && (
+                          <div className="text-[10px] text-stone-500">Alt: {item.altPhone}</div>
+                        )}
+                        {item.location && (
+                          <div className="text-[11px] text-stone-500 flex items-center gap-1 mt-0.5">
+                            <MapPin size={10} /> {item.location}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="font-medium text-stone-800">{item.eventTag || 'All Events'}</div>
+                        <div className="text-[11px] text-stone-500">
+                          {item.serviceDate ? `Event: ${item.serviceDate}` : 'Date TBD'}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 text-right">
+                        <div className="font-bold text-stone-900">{formatINR(item.totalAmount)}</div>
+                        <div className="text-[10px] text-emerald-700">
+                          Paid: {formatINR(item.advancePaid)} ({item.paymentMode || 'UPI'})
+                        </div>
+                        {balance > 0 && (
+                          <div className="text-[10px] font-bold text-amber-700">
+                            Due: {formatINR(balance)}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-3 py-3">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            item.status === 'Confirmed' || item.status === 'Completed'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : item.status === 'Cancelled'
+                              ? 'bg-red-100 text-red-700'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}
+                        >
+                          {item.status}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-center">
+                        {billCount > 0 ? (
+                          <button
+                            onClick={() => {
+                              setLightboxPhotos(item.bills);
+                              setLightboxIndex(0);
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-300 text-[#7A1C24] font-semibold hover:bg-amber-100"
+                          >
+                            <ImageIcon size={12} /> View ({billCount})
+                          </button>
+                        ) : (
+                          <span className="text-stone-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-3 text-right">
+                        <div className="inline-flex items-center gap-1">
+                          {perms.update && (
+                            <button
+                              onClick={() => openEdit(item)}
+                              className="p-1.5 rounded-lg text-stone-600 hover:bg-stone-100"
+                              title="Edit Booking"
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                          )}
+                          {perms.delete && (
+                            <button
+                              onClick={() => setDeleteTarget(item)}
+                              className="p-1.5 rounded-lg text-red-600 hover:bg-red-50"
+                              title="Delete Booking"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Add / Edit Booking Modal */}
+      <Modal
+        isOpen={modalOpen}
+        onClose={() => {
+          stopWebcam();
+          setModalOpen(false);
+        }}
+        title={editing ? 'Edit Booking Details' : 'Add New Booking'}
+        subtitle="Record vendor contact info, booking dates, payment summary & bill photos"
+        maxWidth="max-w-2xl"
+      >
+        <form onSubmit={handleSave} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">
+                Booking / Service Title <span className="text-red-600">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                value={form.title}
+                onChange={(e) => setForm({ ...form, title: e.target.value })}
+                placeholder="Enter booking or service title"
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+              />
+            </div>
+            <DropdownWithOther
+              label="Booking Category"
+              value={form.category}
+              onChange={(val) => setForm({ ...form, category: val })}
+              options={BOOKING_CATEGORIES}
+              placeholder="Enter booking category"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">
+                Vendor / Contact Person
+              </label>
+              <input
+                type="text"
+                value={form.vendorName}
+                onChange={(e) => setForm({ ...form, vendorName: e.target.value })}
+                placeholder="Enter vendor or contact name"
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">
+                Phone Number
+              </label>
+              <input
+                type="tel"
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                placeholder="Enter phone number"
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">
+                Alternate Phone
+              </label>
+              <input
+                type="tel"
+                value={form.altPhone}
+                onChange={(e) => setForm({ ...form, altPhone: e.target.value })}
+                placeholder="Enter alternate phone"
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">
+                Address / Venue Location
+              </label>
+              <input
+                type="text"
+                value={form.location}
+                onChange={(e) => setForm({ ...form, location: e.target.value })}
+                placeholder="Enter address or location"
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+              />
+            </div>
+            <DropdownWithOther
+              label="For Ceremony / Event"
+              value={form.eventTag}
+              onChange={(val) => setForm({ ...form, eventTag: val })}
+              options={['All Events', ...EVENT_PRESETS]}
+              placeholder="Enter ceremony name"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">
+                Booking Date
+              </label>
+              <input
+                type="date"
+                value={form.bookingDate}
+                onChange={(e) => setForm({ ...form, bookingDate: e.target.value })}
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">
+                Service / Event Date
+              </label>
+              <input
+                type="date"
+                value={form.serviceDate}
+                onChange={(e) => setForm({ ...form, serviceDate: e.target.value })}
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+              />
+            </div>
+            <DropdownWithOther
+              label="Booking Status"
+              value={form.status}
+              onChange={(val) => setForm({ ...form, status: val })}
+              options={BOOKING_STATUSES}
+              placeholder="Enter booking status"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">
+                Total Agreed Amount (₹)
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={form.totalAmount}
+                onChange={(e) => setForm({ ...form, totalAmount: e.target.value })}
+                placeholder="Enter total amount"
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">
+                Advance / Token Paid (₹)
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={form.advancePaid}
+                onChange={(e) => setForm({ ...form, advancePaid: e.target.value })}
+                placeholder="Enter advance paid"
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+              />
+            </div>
+            <DropdownWithOther
+              label="Payment Mode"
+              value={form.paymentMode}
+              onChange={(val) => setForm({ ...form, paymentMode: val })}
+              options={PAYMENT_MODES}
+              placeholder="Enter payment mode"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-stone-700 mb-1">
+              Package Inclusions, Terms & Notes
+            </label>
+            <textarea
+              rows={2}
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              placeholder="Enter booking details, package inclusions, or remarks"
+              className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+            />
+          </div>
+
+          {/* Multi-Photo Bill / Invoice Section */}
+          <div className="p-3.5 rounded-xl bg-stone-50 border border-stone-200 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs font-bold text-stone-800">
+                Bill / Agreement Photos ({form.bills.length})
+              </span>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={webcamOpen ? stopWebcam : startWebcam}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#7A1C24] text-white text-xs font-semibold"
+                >
+                  <Camera size={14} /> {webcamOpen ? 'Close Camera' : 'Open Camera'}
+                </button>
+                <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-stone-300 text-stone-700 text-xs font-semibold cursor-pointer">
+                  <Camera size={14} /> Mobile Camera
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    multiple
+                    onChange={handleBillFiles}
+                    className="hidden"
+                  />
+                </label>
+                <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-stone-300 text-stone-700 text-xs font-semibold cursor-pointer">
+                  <Upload size={14} /> Upload Bill Photos
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleBillFiles}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
+
+            {webcamOpen && (
+              <div className="space-y-2 bg-black p-2 rounded-xl text-center">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  className="w-full max-h-56 object-contain mx-auto rounded-lg"
+                />
+                <button
+                  type="button"
+                  onClick={captureWebcamPhoto}
+                  className="px-4 py-1.5 rounded-lg bg-amber-400 text-stone-950 text-xs font-bold"
+                >
+                  Snap Bill Photo
+                </button>
+              </div>
+            )}
+
+            {form.bills.length > 0 && (
+              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                {form.bills.map((src, idx) => (
+                  <div
+                    key={idx}
+                    className="relative group rounded-lg overflow-hidden border border-stone-300 aspect-square bg-white"
+                  >
+                    <img
+                      src={src}
+                      alt={`Bill ${idx + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setForm((prev) => ({
+                          ...prev,
+                          bills: prev.bills.filter((_, i) => i !== idx),
+                        }))
+                      }
+                      className="absolute top-1 right-1 p-1 rounded-full bg-red-600 text-white opacity-90 hover:opacity-100"
+                    >
+                      <X size={11} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-2 pt-3 border-t border-stone-200">
+            <button
+              type="button"
+              onClick={() => {
+                stopWebcam();
+                setModalOpen(false);
+              }}
+              className="px-4 py-2 rounded-lg border border-stone-300 text-xs font-semibold"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 rounded-lg bg-[#7A1C24] text-white text-xs font-semibold"
+            >
+              Save Booking
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Bill Photo Lightbox Gallery */}
+      <Modal
+        isOpen={Boolean(lightboxPhotos)}
+        onClose={() => setLightboxPhotos(null)}
+        title={`Booking Bill Gallery (${lightboxIndex + 1} of ${lightboxPhotos?.length || 0})`}
+        maxWidth="max-w-2xl"
+      >
+        {lightboxPhotos && (
+          <div className="space-y-3">
+            <div className="bg-stone-950 rounded-xl p-2 flex items-center justify-center">
+              <img
+                src={lightboxPhotos[lightboxIndex]}
+                alt="Booking bill"
+                className="max-h-[62vh] object-contain rounded-lg"
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <button
+                disabled={lightboxIndex === 0}
+                onClick={() => setLightboxIndex((i) => Math.max(0, i - 1))}
+                className="px-3 py-1.5 rounded-lg border border-stone-300 text-xs font-semibold disabled:opacity-40"
+              >
+                Previous
+              </button>
+              <a
+                href={lightboxPhotos[lightboxIndex]}
+                download={`booking_bill_${lightboxIndex + 1}.jpg`}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-stone-100 text-xs font-semibold"
+              >
+                <Download size={13} /> Download Bill Photo
+              </a>
+              <button
+                disabled={lightboxIndex >= lightboxPhotos.length - 1}
+                onClick={() =>
+                  setLightboxIndex((i) => Math.min(lightboxPhotos.length - 1, i + 1))
+                }
+                className="px-3 py-1.5 rounded-lg border border-stone-300 text-xs font-semibold disabled:opacity-40"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <ConfirmDialog
+        isOpen={Boolean(deleteTarget)}
+        title="Delete Booking?"
+        message={`Delete booking "${deleteTarget?.title}"?`}
+        onConfirm={() => handleDelete(deleteTarget)}
+        onCancel={() => setDeleteTarget(null)}
+      />
+
+      <ConfirmDialog
+        isOpen={bulkDeleteConfirm}
+        title="Delete Selected Bookings?"
+        message={`Delete ${selectedIds.length} selected bookings?`}
+        onConfirm={handleBulkDelete}
+        onCancel={() => setBulkDeleteConfirm(false)}
       />
     </div>
   );
