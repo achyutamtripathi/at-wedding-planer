@@ -33,8 +33,6 @@ import {
   AlertCircle,
   Key,
   Menu as MenuIcon,
-  PanelLeftClose,
-  PanelLeftOpen,
   UserCheck,
   Activity,
   Heart,
@@ -48,15 +46,6 @@ import {
   Cloud,
   CloudOff,
   RefreshCw,
-  FileText,
-  Printer,
-  BedDouble,
-  AlertTriangle,
-  Receipt,
-  Sparkles,
-  CopyPlus,
-  CheckCircle2,
-  ClipboardList,
 } from 'lucide-react';
 
 // ==========================================
@@ -187,7 +176,7 @@ const MODULES = [
   { key: 'menu', label: 'Menu List', icon: Utensils },
   { key: 'expenses', label: 'Expenses', icon: Wallet },
   { key: 'tasks', label: 'Work Balancing', icon: CheckSquare },
-  { key: 'bill_templates', label: 'Bill Templates', icon: FileText },
+  { key: 'bill_templates', label: 'Bill Templates', icon: FileImage },
 ];
 
 // Client-private modules that a Guest House user cannot open on client weddings
@@ -1384,7 +1373,7 @@ export default function App() {
               title={sidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
               className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-amber-200 transition shrink-0"
             >
-              {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+              {sidebarCollapsed ? <MenuIcon size={16} /> : <X size={16} />}
             </button>
           </div>
         </div>
@@ -1603,7 +1592,7 @@ export default function App() {
               title={sidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
               className="hidden lg:inline-flex p-2 rounded-xl border border-stone-200 text-stone-700 hover:bg-stone-100 transition"
             >
-              {sidebarCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+              {sidebarCollapsed ? <MenuIcon size={17} /> : <X size={17} />}
             </button>
             {activeWedding?.dp ? (
               <img
@@ -8155,6 +8144,11 @@ function BookingsModule({
     showToast('Space removed');
   };
 
+  const activeReceiptTemplate = useMemo(() => {
+    const list = billTemplates.length > 0 ? billTemplates : DEFAULT_BILL_TEMPLATES;
+    return list.find((t) => t.id === selectedTemplateId) || defaultTpl;
+  }, [billTemplates, selectedTemplateId, defaultTpl]);
+
   // Pure client-side PDF generator for Booking Details + Bill Receipt + Attached Receipt/Bill Photos
   const buildBookingReceiptPDF = async (item, tpl = activeReceiptTemplate) => {
     const escPdf = (str) =>
@@ -8515,10 +8509,7 @@ ${xrefPos}
     );
   }, [allScopeBookings, calendarDate]);
 
-  const activeReceiptTemplate = useMemo(() => {
-    const list = billTemplates.length > 0 ? billTemplates : DEFAULT_BILL_TEMPLATES;
-    return list.find((t) => t.id === selectedTemplateId) || defaultTpl;
-  }, [billTemplates, selectedTemplateId, defaultTpl]);
+
 
   return (
     <div className="space-y-5">
@@ -8755,7 +8746,7 @@ ${xrefPos}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 className="font-bold text-base text-stone-900 flex items-center gap-2">
-                <BedDouble size={17} className="text-[#7A1C24]" /> Hall, Lawn & Room Inventory
+                <Building2 size={17} className="text-[#7A1C24]" /> Hall, Lawn & Room Inventory
               </h3>
               <p className="text-xs text-stone-500">
                 Define banquet halls, lawns, and room blocks for slot conflict checks and billing.
@@ -9044,7 +9035,7 @@ ${xrefPos}
                                 title="Generate Bill Receipt"
                                 className="px-2 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-[#7A1C24] border border-amber-300 text-[11px] font-semibold inline-flex items-center gap-1"
                               >
-                                <Receipt size={12} /> Bill
+                                <BookmarkCheck size={12} /> Bill
                               </button>
                               {showGuestHouseTools && (
                                 <button
@@ -9053,7 +9044,7 @@ ${xrefPos}
                                   title="Banquet Event Order (BEO)"
                                   className="px-2 py-1 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-800 text-[11px] font-semibold inline-flex items-center gap-1"
                                 >
-                                  <ClipboardList size={12} /> BEO
+                                  <CheckSquare size={12} /> BEO
                                 </button>
                               )}
                               {perms.update && (
@@ -9101,7 +9092,7 @@ ${xrefPos}
         <form onSubmit={handleSave} className="space-y-4">
           {bookingConflicts.length > 0 && (
             <div className="p-3 rounded-xl bg-red-50 border border-red-300 text-red-800 text-xs flex items-start gap-2">
-              <AlertTriangle size={16} className="shrink-0 mt-0.5 text-red-600" />
+              <AlertCircle size={16} className="shrink-0 mt-0.5 text-red-600" />
               <div>
                 <div className="font-bold">Double-Booking Conflict Detected!</div>
                 <div>
@@ -9764,7 +9755,7 @@ ${xrefPos}
                   onClick={() => window.print()}
                   className="px-3 py-1.5 rounded-lg bg-[#7A1C24] text-white text-xs font-semibold inline-flex items-center gap-1"
                 >
-                  <Printer size={13} /> Print / PDF
+                  <Download size={13} /> Print / PDF
                 </button>
               </div>
             </div>
@@ -9976,7 +9967,7 @@ ${xrefPos}
                 onClick={() => window.print()}
                 className="px-4 py-2 rounded-lg bg-[#7A1C24] text-white font-semibold inline-flex items-center gap-1.5"
               >
-                <Printer size={14} /> Print BEO
+                <Download size={14} /> Print BEO
               </button>
             </div>
           </div>
@@ -10271,7 +10262,7 @@ function BillTemplatesModule({
                   title="Duplicate Template"
                   className="p-1.5 rounded-lg text-stone-600 hover:bg-stone-100"
                 >
-                  <CopyPlus size={14} />
+                  <Copy size={14} />
                 </button>
                 <button
                   type="button"
