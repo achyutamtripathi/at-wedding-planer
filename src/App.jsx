@@ -184,6 +184,9 @@ const CLIENT_PRIVATE_MODULES = ['guests', 'invites', 'expenses', 'tasks'];
 
 const BOOKING_SLOTS = ['Full Day (24 Hrs)', 'Day / Morning', 'Night / Evening'];
 
+const WEDDING_STATUSES = ['Active', 'Upcoming', 'Completed', 'On Hold'];
+
+
 const DEFAULT_BILL_TEMPLATES = [
   {
     id: 'tpl_gst_tax_invoice',
@@ -1053,6 +1056,8 @@ export default function App() {
   // - Super Admin: all weddings
   // - Guest House: ONLY weddings created/owned by this Guest House user
   // - Sub-Admin & Member: ONLY assignedWeddingIds
+  const [ghWeddingViewOptIn, setGhWeddingViewOptIn] = useState(false);
+
   const accessibleWeddings = useMemo(() => {
     if (!currentUser) return [];
     if (isSuperAdmin) return state.weddings;
@@ -1067,12 +1072,18 @@ export default function App() {
     return state.weddings.filter((w) => allowedIds.includes(w.id));
   }, [currentUser, isSuperAdmin, isGuestHouse, state.weddings]);
 
+  // Only Active weddings appear in workspace dropdowns
+  const activeDropdownWeddings = useMemo(() => {
+    return accessibleWeddings.filter((w) => (w.status || 'Active') === 'Active');
+  }, [accessibleWeddings]);
+
   const activeWedding = useMemo(() => {
-    if (accessibleWeddings.length === 0) return null;
+    if (activeDropdownWeddings.length === 0) return null;
     return (
-      accessibleWeddings.find((w) => w.id === state.activeWeddingId) || accessibleWeddings[0]
+      activeDropdownWeddings.find((w) => w.id === state.activeWeddingId) ||
+      activeDropdownWeddings[0]
     );
-  }, [accessibleWeddings, state.activeWeddingId]);
+  }, [activeDropdownWeddings, state.activeWeddingId]);
 
   useEffect(() => {
     if (activeWedding && activeWedding.id !== state.activeWeddingId) {
@@ -1189,6 +1200,7 @@ export default function App() {
     } else {
       const newWedding = {
         id: uid('wed'),
+        status: 'Active',
         ...form,
         ownerUserId: currentUser?.id,
         guestHouseId: isGuestHouse ? currentUser?.id : resolvedGuestHouseInfo.id || '',
@@ -1278,7 +1290,9 @@ export default function App() {
         users={state.users}
         onLogin={(userId) => {
           setCurrentUserId(userId);
-          setActiveTab('dashboard');
+          const foundUser = (state.users || []).find((u) => u.id === userId);
+          setGhWeddingViewOptIn(false);
+          setActiveTab(foundUser?.role === 'guest_house' ? 'bookings' : 'dashboard');
         }}
         cloudStatus={cloudStatus}
       />
@@ -1401,7 +1415,7 @@ export default function App() {
                     }
                     className="w-full px-2.5 py-2 rounded-xl border border-stone-300 bg-white text-xs font-semibold text-stone-800 focus:ring-2 focus:ring-[#7A1C24]"
                   >
-                    {accessibleWeddings.map((w) => (
+                    {activeDropdownWeddings.map((w) => (
                       <option key={w.id} value={w.id}>
                         {w.title}
                       </option>
@@ -1608,7 +1622,11 @@ export default function App() {
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="font-bold text-sm sm:text-base text-stone-900 truncate">
-                  {activeWedding ? activeWedding.title : 'AT Wedding Planner'}
+                  {isGuestHouse && !ghWeddingViewOptIn
+                    ? resolvedGuestHouseInfo.name || 'Guest House Operations'
+                    : activeWedding
+                    ? activeWedding.title
+                    : 'AT Wedding Planner'}
                 </h2>
                 {resolvedGuestHouseInfo.name && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-50 border border-sky-200 text-sky-900 text-[11px] font-semibold">
@@ -1622,7 +1640,9 @@ export default function App() {
                 )}
               </div>
               <p className="text-[11px] text-stone-500 truncate">
-                {activeWedding
+                {isGuestHouse && !ghWeddingViewOptIn
+                  ? 'Guest House Bookings, Hall Slots & Billing • Click "View Wedding" to inspect wedding details'
+                  : activeWedding
                   ? `${activeWedding.coupleNames || 'Wedding Workspace'}${
                       activeWedding.date ? ` • ${activeWedding.date}` : ''
                     }${activeWedding.venue ? ` • ${activeWedding.venue}` : ''}`
@@ -1632,7 +1652,20 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {countdown !== null && (
+            {isGuestHouse && activeWedding && (
+              <button
+                type="button"
+                onClick={() => setGhWeddingViewOptIn((v) => !v)}
+                className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition ${
+                  ghWeddingViewOptIn
+                    ? 'bg-[#7A1C24] text-white border-[#7A1C24]'
+                    : 'bg-amber-50 text-[#7A1C24] border-amber-300 hover:bg-amber-100'
+                }`}
+              >
+                {ghWeddingViewOptIn ? 'Hide Wedding View' : 'View Wedding'}
+              </button>
+            )}
+            {countdown !== null && (!isGuestHouse || ghWeddingViewOptIn) && (
               <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-300/80 text-[#7A1C24] text-xs font-bold">
                 <Clock size={14} />
                 <span>
@@ -1709,7 +1742,7 @@ export default function App() {
                     }}
                     className="w-full px-2.5 py-2 rounded-lg border border-stone-300 bg-white text-xs font-semibold"
                   >
-                    {accessibleWeddings.map((w) => (
+                    {activeDropdownWeddings.map((w) => (
                       <option key={w.id} value={w.id}>
                         {w.title}
                       </option>
@@ -1842,6 +1875,27 @@ export default function App() {
               recordAudit={recordAudit}
               showToast={showToast}
             />
+          ) : activeTab === 'bookings' && isGuestHouse ? (
+            <BookingsModule
+              bookings={guestHouseAllBookings}
+              allScopeBookings={guestHouseAllBookings}
+              spaces={scopedSpaces}
+              billTemplates={scopedBillTemplates}
+              weddingEvents={allWeddingEvents}
+              weddingMenu={state.menu.filter((m) => m.weddingId === activeWedding?.id)}
+              ghWeddingViewOptIn={ghWeddingViewOptIn}
+              onToggleWeddingView={() => setGhWeddingViewOptIn((v) => !v)}
+              activeWedding={activeWedding}
+              weddingId={activeWedding?.id || 'gh_direct'}
+              currentUser={currentUser}
+              resolvedGuestHouseInfo={resolvedGuestHouseInfo}
+              defaultVenue={defaultVenueName}
+              perms={getModulePerms('bookings')}
+              setState={updateState}
+              stampUser={stampUser}
+              recordAudit={recordAudit}
+              showToast={showToast}
+            />
           ) : !activeWedding ? (
             <NoWeddingEmptyState
               canCreateWedding={canManageWeddings}
@@ -1886,6 +1940,10 @@ export default function App() {
                   allScopeBookings={guestHouseAllBookings}
                   spaces={scopedSpaces}
                   billTemplates={scopedBillTemplates}
+                  weddingEvents={allWeddingEvents}
+                  weddingMenu={state.menu.filter((m) => m.weddingId === activeWedding?.id)}
+                  ghWeddingViewOptIn={ghWeddingViewOptIn}
+                  onToggleWeddingView={() => setGhWeddingViewOptIn((v) => !v)}
                   activeWedding={activeWedding}
                   weddingId={activeWedding.id}
                   currentUser={currentUser}
@@ -2068,6 +2126,7 @@ function WeddingFormModal({
 }) {
   const [title, setTitle] = useState('');
   const [coupleNames, setCoupleNames] = useState('');
+  const [status, setStatus] = useState('Active');
   const [date, setDate] = useState('');
   const [city, setCity] = useState('');
   const [venue, setVenue] = useState('');
@@ -2077,6 +2136,7 @@ function WeddingFormModal({
     if (initialData) {
       setTitle(initialData.title || '');
       setCoupleNames(initialData.coupleNames || '');
+      setStatus(initialData.status || 'Active');
       setDate(initialData.date || '');
       setCity(initialData.city || '');
       setVenue(initialData.venue || defaultVenue || '');
@@ -2084,6 +2144,7 @@ function WeddingFormModal({
     } else {
       setTitle('');
       setCoupleNames('');
+      setStatus('Active');
       setDate('');
       setCity(defaultCity || '');
       setVenue(defaultVenue || '');
@@ -2104,6 +2165,7 @@ function WeddingFormModal({
     onSave({
       title: title.trim(),
       coupleNames: coupleNames.trim(),
+      status: status || 'Active',
       date,
       city: city.trim(),
       venue: venue.trim(),
@@ -2165,15 +2227,33 @@ function WeddingFormModal({
             className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
           />
         </div>
-        <div>
-          <label className="block text-xs font-semibold text-stone-700 mb-1">Couple Names</label>
-          <input
-            type="text"
-            value={coupleNames}
-            onChange={(e) => setCoupleNames(e.target.value)}
-            placeholder="Enter couple names"
-            className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
-          />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-stone-700 mb-1">Couple Names</label>
+            <input
+              type="text"
+              value={coupleNames}
+              onChange={(e) => setCoupleNames(e.target.value)}
+              placeholder="Enter couple names"
+              className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-stone-700 mb-1">
+              Wedding Status (Active shows in dropdowns)
+            </label>
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm bg-white"
+            >
+              {WEDDING_STATUSES.map((st) => (
+                <option key={st} value={st}>
+                  {st}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
@@ -2229,13 +2309,18 @@ function WeddingFormModal({
 }
 
 function WeddingsManager({ weddings, activeWeddingId, onSelect, onAdd, onEdit, onDelete }) {
+  const groups = WEDDING_STATUSES.map((st) => ({
+    status: st,
+    items: weddings.filter((w) => (w.status || 'Active') === st),
+  })).filter((g) => g.items.length > 0 || g.status === 'Active');
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold text-stone-900">Manage Wedding Plans</h2>
           <p className="text-xs text-stone-500">
-            Create, edit, switch, or delete your accessible wedding workspaces.
+            Grouped by status. Only &ldquo;Active&rdquo; weddings appear in the workspace dropdown.
           </p>
         </div>
         <button
@@ -2257,86 +2342,127 @@ function WeddingsManager({ weddings, activeWeddingId, onSelect, onAdd, onEdit, o
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {weddings.map((w) => {
-            const isActive = w.id === activeWeddingId;
-            return (
-              <div
-                key={w.id}
-                className={`bg-white rounded-2xl border p-5 shadow-xs flex flex-col justify-between space-y-4 ${
-                  isActive ? 'border-[#7A1C24] ring-2 ring-[#7A1C24]/15' : 'border-stone-200'
-                }`}
-              >
-                <div>
-                  <div className="flex items-start gap-3">
-                    {w.dp ? (
-                      <img
-                        src={w.dp}
-                        alt={w.title}
-                        className="w-12 h-12 rounded-xl object-cover border border-amber-300 shrink-0"
-                      />
-                    ) : (
-                      <div className="w-12 h-12 rounded-xl bg-amber-100 text-[#7A1C24] flex items-center justify-center shrink-0">
-                        <Heart size={20} />
-                      </div>
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <h3 className="font-bold text-base text-stone-900 truncate">{w.title}</h3>
-                        {isActive && (
-                          <span className="px-2 py-0.5 rounded-full bg-amber-100 text-[#7A1C24] text-[10px] font-bold shrink-0">
-                            Active
-                          </span>
-                        )}
-                      </div>
-                      {w.coupleNames && (
-                        <p className="text-xs text-stone-600 mt-0.5 font-medium truncate">
-                          {w.coupleNames}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="mt-3 space-y-1 text-xs text-stone-500">
-                    {w.date && (
-                      <div className="flex items-center gap-1.5">
-                        <Calendar size={13} /> {w.date}
-                      </div>
-                    )}
-                    {(w.city || w.venue) && (
-                      <div className="flex items-center gap-1.5">
-                        <MapPin size={13} /> {w.city} {w.venue ? `• ${w.venue}` : ''}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="pt-3 border-t border-stone-100 flex items-center justify-between gap-2">
-                  <button
-                    onClick={() => onSelect(w.id)}
-                    className="px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-semibold"
+        <div className="space-y-6">
+          {groups.map((grp) => (
+            <div key={grp.status} className="space-y-3">
+              <div className="flex items-center justify-between border-b border-stone-200 pb-2">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                      grp.status === 'Active'
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : grp.status === 'Upcoming'
+                        ? 'bg-sky-100 text-sky-900'
+                        : grp.status === 'Completed'
+                        ? 'bg-stone-200 text-stone-800'
+                        : 'bg-amber-100 text-amber-900'
+                    }`}
                   >
-                    Open Workspace
-                  </button>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => onEdit(w)}
-                      className="p-1.5 rounded-lg text-stone-600 hover:bg-stone-100"
-                      title="Edit"
-                    >
-                      <Edit2 size={15} />
-                    </button>
-                    <button
-                      onClick={() => onDelete(w)}
-                      className="p-1.5 rounded-lg text-red-600 hover:bg-red-50"
-                      title="Delete"
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
+                    {grp.status}
+                  </span>
+                  <span className="text-xs font-semibold text-stone-500">
+                    ({grp.items.length})
+                  </span>
                 </div>
               </div>
-            );
-          })}
+
+              {grp.items.length === 0 ? (
+                <p className="text-xs text-stone-400 italic">No {grp.status.toLowerCase()} weddings.</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {grp.items.map((w) => {
+                    const isActiveWorkspace = w.id === activeWeddingId && grp.status === 'Active';
+                    return (
+                      <div
+                        key={w.id}
+                        className={`bg-white rounded-2xl border p-5 shadow-xs flex flex-col justify-between space-y-4 ${
+                          isActiveWorkspace
+                            ? 'border-[#7A1C24] ring-2 ring-[#7A1C24]/15'
+                            : 'border-stone-200'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-start gap-3">
+                            {w.dp ? (
+                              <img
+                                src={w.dp}
+                                alt={w.title}
+                                className="w-12 h-12 rounded-xl object-cover border border-amber-300 shrink-0"
+                              />
+                            ) : (
+                              <div className="w-12 h-12 rounded-xl bg-amber-100 text-[#7A1C24] flex items-center justify-center shrink-0">
+                                <Heart size={20} />
+                              </div>
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-start justify-between gap-2">
+                                <h3 className="font-bold text-base text-stone-900 truncate">
+                                  {w.title}
+                                </h3>
+                                {isActiveWorkspace && (
+                                  <span className="px-2 py-0.5 rounded-full bg-amber-100 text-[#7A1C24] text-[10px] font-bold shrink-0">
+                                    Selected
+                                  </span>
+                                )}
+                              </div>
+                              {w.coupleNames && (
+                                <p className="text-xs text-stone-600 mt-0.5 font-medium truncate">
+                                  {w.coupleNames}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="mt-3 space-y-1 text-xs text-stone-500">
+                            {w.date && (
+                              <div className="flex items-center gap-1.5">
+                                <Calendar size={13} /> {w.date}
+                              </div>
+                            )}
+                            {(w.city || w.venue) && (
+                              <div className="flex items-center gap-1.5">
+                                <MapPin size={13} /> {w.city} {w.venue ? `• ${w.venue}` : ''}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="pt-3 border-t border-stone-100 flex items-center justify-between gap-2">
+                          {(w.status || 'Active') === 'Active' ? (
+                            <button
+                              onClick={() => onSelect(w.id)}
+                              className="px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-semibold"
+                            >
+                              Open Workspace
+                            </button>
+                          ) : (
+                            <span className="text-[11px] text-stone-400 font-medium">
+                              Set Active to open
+                            </span>
+                          )}
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => onEdit(w)}
+                              className="p-1.5 rounded-lg text-stone-600 hover:bg-stone-100"
+                              title="Edit"
+                            >
+                              <Edit2 size={15} />
+                            </button>
+                            <button
+                              onClick={() => onDelete(w)}
+                              className="p-1.5 rounded-lg text-red-600 hover:bg-red-50"
+                              title="Delete"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -7571,7 +7697,7 @@ function UsersAdminModule({
                   </p>
                 ) : (
                   <div className="flex flex-wrap gap-2.5">
-                    {accessibleWeddings.map((w) => (
+                    {activeDropdownWeddings.map((w) => (
                       <label
                         key={w.id}
                         className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-stone-300 text-xs font-semibold cursor-pointer"
@@ -7749,6 +7875,10 @@ function BookingsModule({
   allScopeBookings = [],
   spaces = [],
   billTemplates = [],
+  weddingEvents = [],
+  weddingMenu = [],
+  ghWeddingViewOptIn = false,
+  onToggleWeddingView = null,
   activeWedding,
   weddingId,
   currentUser,
@@ -7808,6 +7938,8 @@ function BookingsModule({
   const emptyForm = () => ({
     title: '',
     category: 'Venue & Banquet Hall',
+    categories: ['Venue & Banquet Hall'],
+    customCategories: [],
     vendorName: '',
     phone: '',
     altPhone: '',
@@ -7823,6 +7955,8 @@ function BookingsModule({
     checkOutDate: '',
     status: 'Confirmed',
     lineItems: [],
+    discountType: 'flat',
+    discountValue: 0,
     gstEnabled: false,
     cgstRate: 9,
     sgstRate: 9,
@@ -7835,9 +7969,12 @@ function BookingsModule({
   });
 
   const [form, setForm] = useState(emptyForm);
+  const [newCustomCategory, setNewCustomCategory] = useState('');
   const [newItemLabel, setNewItemLabel] = useState('');
   const [newItemQty, setNewItemQty] = useState(1);
   const [newItemRate, setNewItemRate] = useState('');
+  const [selectedEventToAdd, setSelectedEventToAdd] = useState('');
+  const [selectedMenuToAdd, setSelectedMenuToAdd] = useState('');
   const [newInstallmentAmt, setNewInstallmentAmt] = useState('');
   const [newInstallmentMode, setNewInstallmentMode] = useState('UPI');
   const [newInstallmentRef, setNewInstallmentRef] = useState('');
@@ -7865,7 +8002,16 @@ function BookingsModule({
     setEditing(item);
     setForm({
       title: item.title || '',
-      category: item.category || 'Venue & Banquet Hall',
+      category:
+        item.category ||
+        (Array.isArray(item.categories) && item.categories[0]) ||
+        'Venue & Banquet Hall',
+      categories: Array.isArray(item.categories)
+        ? item.categories
+        : item.category
+        ? [item.category]
+        : ['Venue & Banquet Hall'],
+      customCategories: Array.isArray(item.customCategories) ? item.customCategories : [],
       vendorName: item.vendorName || '',
       phone: item.phone || '',
       altPhone: item.altPhone || '',
@@ -7881,6 +8027,8 @@ function BookingsModule({
       checkOutDate: item.checkOutDate || '',
       status: item.status || 'Confirmed',
       lineItems: Array.isArray(item.lineItems) ? item.lineItems : [],
+      discountType: item.discountType || 'flat',
+      discountValue: item.discountValue ?? 0,
       gstEnabled: Boolean(item.gstEnabled),
       cgstRate: item.cgstRate ?? 9,
       sgstRate: item.sgstRate ?? 9,
@@ -7894,6 +8042,22 @@ function BookingsModule({
     setModalOpen(true);
   };
 
+  const computeBillTotalFromState = (nextState) => {
+    const items = Array.isArray(nextState.lineItems) ? nextState.lineItems : [];
+    const subtotal = items.reduce((s, x) => s + (Number(x.amount) || 0), 0);
+    if (items.length === 0) return nextState.totalAmount;
+    const discVal = Math.max(0, Number(nextState.discountValue) || 0);
+    const discAmt =
+      nextState.discountType === 'percent'
+        ? Math.round((subtotal * Math.min(100, discVal)) / 100)
+        : Math.min(subtotal, Math.round(discVal));
+    const taxable = Math.max(0, subtotal - discAmt);
+    const taxPct = nextState.gstEnabled
+      ? (Number(nextState.cgstRate) || 0) + (Number(nextState.sgstRate) || 0)
+      : 0;
+    return Math.round(taxable * (1 + taxPct / 100));
+  };
+
   // Add itemized charge & auto-recalculate totalAmount when line items exist
   const addLineItem = () => {
     if (!newItemLabel.trim()) return;
@@ -7903,25 +8067,101 @@ function BookingsModule({
       ...(form.lineItems || []),
       { id: uid('li'), label: newItemLabel.trim(), qty, rate, amount: qty * rate },
     ];
-    const subtotal = nextItems.reduce((s, x) => s + (Number(x.amount) || 0), 0);
-    const taxPct = form.gstEnabled ? (Number(form.cgstRate) || 0) + (Number(form.sgstRate) || 0) : 0;
-    const grand = Math.round(subtotal * (1 + taxPct / 100));
-    setForm((prev) => ({
-      ...prev,
-      lineItems: nextItems,
-      totalAmount: grand,
-    }));
+    setForm((prev) => {
+      const updated = { ...prev, lineItems: nextItems };
+      return { ...updated, totalAmount: computeBillTotalFromState(updated) };
+    });
     setNewItemLabel('');
     setNewItemQty(1);
     setNewItemRate('');
   };
 
+  const addEventToBill = () => {
+    const ev = (weddingEvents || []).find((e) => e.id === selectedEventToAdd);
+    if (!ev) return;
+    const rate = Math.max(0, Number(newItemRate) || 0);
+    const qty = Math.max(1, Number(newItemQty) || 1);
+    const label = `Event: ${ev.name}${ev.date ? ` (${ev.date})` : ''}`;
+    const nextItems = [
+      ...(form.lineItems || []),
+      { id: uid('li'), sourceType: 'event', label, qty, rate, amount: qty * rate },
+    ];
+    setForm((prev) => {
+      const updated = { ...prev, lineItems: nextItems };
+      return { ...updated, totalAmount: computeBillTotalFromState(updated) };
+    });
+    setSelectedEventToAdd('');
+    setNewItemRate('');
+  };
+
+  const addMenuDishToBill = () => {
+    const dish = (weddingMenu || []).find((m) => m.id === selectedMenuToAdd);
+    if (!dish) return;
+    const qty = Math.max(1, Number(newItemQty) || Number(form.expectedPax) || 1);
+    const rate = Math.max(0, Number(newItemRate) || 0);
+    const label = `Menu: ${dish.dishName}${dish.course ? ` [${dish.course}]` : ''}${
+      dish.event ? ` - ${dish.event}` : ''
+    }`;
+    const nextItems = [
+      ...(form.lineItems || []),
+      { id: uid('li'), sourceType: 'menu', label, qty, rate, amount: qty * rate },
+    ];
+    setForm((prev) => {
+      const updated = { ...prev, lineItems: nextItems };
+      return { ...updated, totalAmount: computeBillTotalFromState(updated) };
+    });
+    setSelectedMenuToAdd('');
+    setNewItemRate('');
+  };
+
+  const addAllEventsAndMenuToBill = () => {
+    const evItems = (weddingEvents || []).map((ev) => ({
+      id: uid('li'),
+      sourceType: 'event',
+      label: `Event: ${ev.name}${ev.date ? ` (${ev.date})` : ''}`,
+      qty: 1,
+      rate: 0,
+      amount: 0,
+    }));
+    const menuItems = (weddingMenu || []).map((dish) => ({
+      id: uid('li'),
+      sourceType: 'menu',
+      label: `Menu: ${dish.dishName}${dish.event ? ` (${dish.event})` : ''}`,
+      qty: Math.max(1, Number(form.expectedPax) || 1),
+      rate: 0,
+      amount: 0,
+    }));
+    const combined = [...(form.lineItems || []), ...evItems, ...menuItems];
+    if (combined.length === (form.lineItems || []).length) return;
+    setForm((prev) => {
+      const updated = { ...prev, lineItems: combined };
+      return { ...updated, totalAmount: computeBillTotalFromState(updated) };
+    });
+    showToast(`Added ${evItems.length} event(s) & ${menuItems.length} menu item(s) to bill`);
+  };
+
+  const updateLineItemRow = (liId, field, rawVal) => {
+    const nextItems = (form.lineItems || []).map((li) => {
+      if (li.id !== liId) return li;
+      const qty = field === 'qty' ? Math.max(1, Number(rawVal) || 1) : Number(li.qty) || 1;
+      const rate = field === 'rate' ? Math.max(0, Number(rawVal) || 0) : Number(li.rate) || 0;
+      return { ...li, qty, rate, amount: qty * rate };
+    });
+    setForm((prev) => {
+      const updated = { ...prev, lineItems: nextItems };
+      return { ...updated, totalAmount: computeBillTotalFromState(updated) };
+    });
+  };
+
   const removeLineItem = (liId) => {
     const nextItems = (form.lineItems || []).filter((x) => x.id !== liId);
-    const subtotal = nextItems.reduce((s, x) => s + (Number(x.amount) || 0), 0);
-    const taxPct = form.gstEnabled ? (Number(form.cgstRate) || 0) + (Number(form.sgstRate) || 0) : 0;
-    const grand = nextItems.length > 0 ? Math.round(subtotal * (1 + taxPct / 100)) : form.totalAmount;
-    setForm((prev) => ({ ...prev, lineItems: nextItems, totalAmount: grand }));
+    setForm((prev) => {
+      const updated = { ...prev, lineItems: nextItems };
+      return {
+        ...updated,
+        totalAmount: nextItems.length > 0 ? computeBillTotalFromState(updated) : prev.totalAmount,
+      };
+    });
   };
 
   // Add payment installment & auto-update advancePaid
@@ -8021,8 +8261,16 @@ function BookingsModule({
   const handleSave = (e) => {
     e.preventDefault();
     if (!form.title.trim()) return;
+    const mergedCats = Array.from(
+      new Set([...(form.categories || []), ...(form.customCategories || [])].filter(Boolean))
+    );
     const payload = {
       ...form,
+      categories: mergedCats,
+      customCategories: form.customCategories || [],
+      category: mergedCats[0] || form.category || 'Miscellaneous',
+      discountType: form.discountType || 'flat',
+      discountValue: Number(form.discountValue) || 0,
       expectedPax: Number(form.expectedPax) || 0,
       totalAmount: Number(form.totalAmount) || 0,
       advancePaid: Number(form.advancePaid) || 0,
@@ -8389,7 +8637,7 @@ ${xrefPos}
     return { blob, file, fileName: safeName };
   };
 
-  const shareBookingPDFViaWhatsApp = async (item, tpl = activeReceiptTemplate) => {
+  const formatExactBillText = (item, tpl = activeReceiptTemplate) => {
     const total = Number(item.totalAmount) || 0;
     const paid = Number(item.advancePaid) || 0;
     const due = Math.max(0, total - paid);
@@ -8398,21 +8646,70 @@ ${xrefPos}
       item.guestHouseName ||
       resolvedGuestHouseInfo?.name ||
       activeWedding?.venue ||
-      'Venue';
+      'AT Wedding Planner';
     const rcpCode = item.receiptNo || item.id.slice(-8).toUpperCase();
+    const catsList = Array.isArray(item.categories) && item.categories.length > 0
+      ? item.categories.join(', ')
+      : item.category || '';
+
+    const itemsArr =
+      Array.isArray(item.lineItems) && item.lineItems.length > 0
+        ? item.lineItems.map(
+            (li) => `• ${li.label}: ${li.qty} × ${formatINR(li.rate)} = ${formatINR(li.amount)}`
+          )
+        : [`• ${item.title}: ${formatINR(total)}`];
+
+    const discVal = Number(item.discountValue) || 0;
+    const discLine =
+      discVal > 0
+        ? `Discount (${item.discountType === 'percent' ? `${discVal}%` : 'Flat'}): ${
+            item.discountType === 'percent' ? `${discVal}%` : formatINR(discVal)
+          }`
+        : '';
+
+    const taxLine = item.gstEnabled
+      ? `Tax: CGST ${Number(item.cgstRate) || 0}% + SGST ${Number(item.sgstRate) || 0}%`
+      : '';
 
     const summaryLines = [
-      `*${ghName}* — Booking & Receipt PDF (${rcpCode})`,
+      `BILL RECEIPT — ${ghName}`,
+      tpl?.tagline ? `${tpl.tagline}` : '',
+      `Receipt No: ${rcpCode} | Date: ${item.bookingDate || new Date().toISOString().slice(0, 10)}`,
+      (tpl?.gstin || resolvedGuestHouseInfo?.gstin)
+        ? `GSTIN: ${tpl?.gstin || resolvedGuestHouseInfo?.gstin}${
+            tpl?.sacCode ? ` | SAC: ${tpl.sacCode}` : ''
+          }`
+        : '',
+      '----------------------------------------',
       `Booking: ${item.title}`,
-      activeWedding?.title ? `Event/Wedding: ${activeWedding.title}` : '',
-      item.vendorName ? `Client/Vendor: ${item.vendorName}` : '',
-      item.phone ? `Phone: ${item.phone}` : '',
-      `Date & Slot: ${item.serviceDate || 'TBD'} (${item.slot || 'Full Day'})`,
-      `Hall/Venue: ${item.spaceName || item.location || ghName}`,
-      `Total: ${formatINR(total)} | Paid: ${formatINR(paid)} | Balance Due: ${formatINR(due)}`,
-      `Status: ${item.status}`,
+      catsList ? `Categories: ${catsList}` : '',
+      activeWedding?.title ? `Wedding: ${activeWedding.title}` : '',
+      `Client/Vendor: ${item.vendorName || '-'} | Phone: ${item.phone || '-'}`,
+      `Venue/Hall: ${item.spaceName || item.location || ghName}`,
+      `Date: ${item.serviceDate || 'TBD'} | Slot: ${item.slot || 'Full Day'}${
+        item.expectedPax > 0 ? ` | Pax: ${item.expectedPax}` : ''
+      }`,
+      '----------------------------------------',
+      'CHARGES & ITEMS:',
+      ...itemsArr,
+      discLine,
+      taxLine,
+      '----------------------------------------',
+      `Total Amount: ${formatINR(total)}`,
+      `Advance Paid (${item.paymentMode || 'UPI'}): ${formatINR(paid)}`,
+      `Balance Due: ${formatINR(due)}`,
+      `Status: ${item.status || 'Confirmed'}`,
+      tpl?.upiId ? `UPI ID: ${tpl.upiId}` : '',
+      tpl?.bankDetails ? `Bank: ${tpl.bankDetails}` : '',
+      tpl?.terms ? `Terms:
+${tpl.terms}` : '',
     ].filter(Boolean);
-    const summaryText = summaryLines.join('\n');
+    return summaryLines.join('\n');
+  };
+
+  const shareBookingPDFViaWhatsApp = async (item, tpl = activeReceiptTemplate) => {
+    const rcpCode = item.receiptNo || item.id.slice(-8).toUpperCase();
+    const summaryText = formatExactBillText(item, tpl);
 
     const { blob, file, fileName } = await buildBookingReceiptPDF(item, tpl);
 
@@ -9117,13 +9414,111 @@ ${xrefPos}
                 className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
               />
             </div>
-            <DropdownWithOther
-              label="Booking Category"
-              value={form.category}
-              onChange={(val) => setForm({ ...form, category: val })}
-              options={BOOKING_CATEGORIES}
-              placeholder="Enter booking category"
-            />
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">
+                Booking Categories (Multi-Select)
+              </label>
+              <div className="max-h-28 overflow-y-auto p-2 border border-stone-300 rounded-lg bg-white space-y-1">
+                {BOOKING_CATEGORIES.map((catOpt) => {
+                  const checked = (form.categories || []).includes(catOpt);
+                  return (
+                    <label
+                      key={catOpt}
+                      className="flex items-center gap-2 text-xs text-stone-800 cursor-pointer py-0.5"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          const next = e.target.checked
+                            ? [...(form.categories || []), catOpt]
+                            : (form.categories || []).filter((c) => c !== catOpt);
+                          setForm({
+                            ...form,
+                            categories: next,
+                            category: next[0] || (form.customCategories || [])[0] || '',
+                          });
+                        }}
+                        className="rounded border-stone-300 text-[#7A1C24]"
+                      />
+                      <span>{catOpt}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              <div className="mt-2 flex gap-1.5">
+                <input
+                  type="text"
+                  value={newCustomCategory}
+                  onChange={(e) => setNewCustomCategory(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const val = newCustomCategory.trim();
+                      if (!val) return;
+                      const nextCustom = Array.from(new Set([...(form.customCategories || []), val]));
+                      const nextCats = Array.from(new Set([...(form.categories || []), val]));
+                      setForm({
+                        ...form,
+                        customCategories: nextCustom,
+                        categories: nextCats,
+                        category: nextCats[0] || val,
+                      });
+                      setNewCustomCategory('');
+                    }
+                  }}
+                  placeholder="Add custom 'Other' category..."
+                  className="flex-1 px-2.5 py-1.5 border border-amber-300 bg-amber-50/40 rounded-lg text-xs"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const val = newCustomCategory.trim();
+                    if (!val) return;
+                    const nextCustom = Array.from(new Set([...(form.customCategories || []), val]));
+                    const nextCats = Array.from(new Set([...(form.categories || []), val]));
+                    setForm({
+                      ...form,
+                      customCategories: nextCustom,
+                      categories: nextCats,
+                      category: nextCats[0] || val,
+                    });
+                    setNewCustomCategory('');
+                  }}
+                  className="px-2.5 py-1.5 rounded-lg bg-[#7A1C24] text-white text-xs font-semibold shrink-0"
+                >
+                  + Other
+                </button>
+              </div>
+              {(form.customCategories || []).length > 0 && (
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {form.customCategories.map((cc) => (
+                    <span
+                      key={cc}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-[#7A1C24] text-[10px] font-bold"
+                    >
+                      {cc}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextCustom = (form.customCategories || []).filter((x) => x !== cc);
+                          const nextCats = (form.categories || []).filter((x) => x !== cc);
+                          setForm({
+                            ...form,
+                            customCategories: nextCustom,
+                            categories: nextCats,
+                            category: nextCats[0] || '',
+                          });
+                        }}
+                        className="hover:text-red-700"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -9283,9 +9678,21 @@ ${xrefPos}
           {/* Itemized Package / Bill Line Items */}
           <div className="p-3.5 rounded-xl bg-stone-50 border border-stone-200 space-y-2.5">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-stone-800">
-                Itemized Charges (Optional — Auto-Calculates Total)
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-bold text-stone-800">
+                  Itemized Charges, Events &amp; Menu (Auto-Calculates Total)
+                </span>
+                {((weddingEvents && weddingEvents.length > 0) ||
+                  (weddingMenu && weddingMenu.length > 0)) && (
+                  <button
+                    type="button"
+                    onClick={addAllEventsAndMenuToBill}
+                    className="px-2 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-[#7A1C24] text-[10px] font-bold"
+                  >
+                    + Include All Events &amp; Menu
+                  </button>
+                )}
+              </div>
               <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-stone-700 cursor-pointer">
                 <input
                   type="checkbox"
@@ -9378,15 +9785,130 @@ ${xrefPos}
               </div>
             </div>
 
+            {((weddingEvents && weddingEvents.length > 0) ||
+              (weddingMenu && weddingMenu.length > 0)) && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                {weddingEvents && weddingEvents.length > 0 && (
+                  <div className="flex gap-1.5">
+                    <select
+                      value={selectedEventToAdd}
+                      onChange={(e) => setSelectedEventToAdd(e.target.value)}
+                      className="flex-1 px-2 py-1.5 border border-stone-300 bg-white rounded-lg text-xs"
+                    >
+                      <option value="">-- Select Wedding Event to Bill --</option>
+                      {weddingEvents.map((ev) => (
+                        <option key={ev.id} value={ev.id}>
+                          {ev.name} {ev.date ? `(${ev.date})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={addEventToBill}
+                      className="px-2.5 py-1.5 rounded-lg bg-stone-800 text-white text-xs font-semibold shrink-0"
+                    >
+                      + Event
+                    </button>
+                  </div>
+                )}
+                {weddingMenu && weddingMenu.length > 0 && (
+                  <div className="flex gap-1.5">
+                    <select
+                      value={selectedMenuToAdd}
+                      onChange={(e) => setSelectedMenuToAdd(e.target.value)}
+                      className="flex-1 px-2 py-1.5 border border-stone-300 bg-white rounded-lg text-xs"
+                    >
+                      <option value="">-- Select Menu Dish to Bill --</option>
+                      {weddingMenu.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.dishName} ({m.event || 'Menu'})
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={addMenuDishToBill}
+                      className="px-2.5 py-1.5 rounded-lg bg-stone-800 text-white text-xs font-semibold shrink-0"
+                    >
+                      + Menu
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+              <div>
+                <label className="block text-[11px] font-semibold text-stone-600 mb-0.5">
+                  Discount Type
+                </label>
+                <select
+                  value={form.discountType || 'flat'}
+                  onChange={(e) => {
+                    const nextType = e.target.value;
+                    setForm((prev) => {
+                      const updated = { ...prev, discountType: nextType };
+                      return { ...updated, totalAmount: computeBillTotalFromState(updated) };
+                    });
+                  }}
+                  className="w-full px-2.5 py-1.5 border border-stone-300 bg-white rounded-lg text-xs"
+                >
+                  <option value="flat">Flat Amount (₹)</option>
+                  <option value="percent">Percentage (%)</option>
+                </select>
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-[11px] font-semibold text-stone-600 mb-0.5">
+                  Discount Value ({form.discountType === 'percent' ? '%' : '₹'})
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={form.discountValue ?? 0}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setForm((prev) => {
+                      const updated = { ...prev, discountValue: val };
+                      return { ...updated, totalAmount: computeBillTotalFromState(updated) };
+                    });
+                  }}
+                  className="w-full px-2.5 py-1.5 border border-stone-300 bg-white rounded-lg text-xs"
+                />
+              </div>
+            </div>
+
             {(form.lineItems || []).length > 0 && (
               <div className="divide-y divide-stone-200 bg-white rounded-lg border border-stone-200 text-xs">
                 {form.lineItems.map((li) => (
-                  <div key={li.id} className="px-3 py-1.5 flex items-center justify-between gap-2">
-                    <span className="font-medium text-stone-800">
-                      {li.label} ({li.qty} × {formatINR(li.rate)})
+                  <div
+                    key={li.id}
+                    className="px-3 py-1.5 flex flex-wrap items-center justify-between gap-2"
+                  >
+                    <span className="font-medium text-stone-800 flex-1 min-w-[140px]">
+                      {li.label}
                     </span>
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-stone-900">{formatINR(li.amount)}</span>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        min="1"
+                        value={li.qty}
+                        onChange={(e) => updateLineItemRow(li.id, 'qty', e.target.value)}
+                        className="w-14 px-1.5 py-1 border border-stone-300 rounded text-xs text-center"
+                        title="Qty"
+                      />
+                      <span>×</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={li.rate}
+                        onChange={(e) => updateLineItemRow(li.id, 'rate', e.target.value)}
+                        className="w-20 px-1.5 py-1 border border-stone-300 rounded text-xs text-right"
+                        title="Rate ₹"
+                      />
+                      <span className="font-bold text-stone-900 w-20 text-right">
+                        {formatINR(li.amount)}
+                      </span>
                       <button
                         type="button"
                         onClick={() => removeLineItem(li.id)}
@@ -9758,6 +10280,30 @@ ${xrefPos}
                   <Download size={13} /> Print / PDF
                 </button>
               </div>
+            </div>
+
+            {/* Exact Bill Format Preview (Matches WhatsApp Share Line-for-Line) */}
+            <div className="p-4 rounded-xl bg-stone-50 border border-stone-200 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-stone-500">
+                  Exact Bill Format (WhatsApp &amp; Receipt Text)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(
+                      formatExactBillText(receiptBooking, activeReceiptTemplate)
+                    );
+                    showToast('Copied exact formatted bill');
+                  }}
+                  className="text-[11px] font-semibold text-[#7A1C24] hover:underline"
+                >
+                  Copy Text
+                </button>
+              </div>
+              <pre className="text-xs text-stone-800 whitespace-pre-wrap font-mono bg-white p-3 rounded-lg border border-stone-200">
+                {formatExactBillText(receiptBooking, activeReceiptTemplate)}
+              </pre>
             </div>
 
             {/* Printable Receipt Slip */}
