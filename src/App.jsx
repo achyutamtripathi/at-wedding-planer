@@ -1392,67 +1392,69 @@ export default function App() {
           </div>
         </div>
 
-        {/* Active Wedding Switcher */}
-        <div className="p-3 border-b border-stone-200/80 bg-stone-50/70">
-          {!sidebarCollapsed ? (
-            <>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-500 mb-1">
-                Active Wedding Workspace
-              </label>
-              {accessibleWeddings.length > 0 ? (
-                <div className="flex items-center gap-2">
-                  {activeWedding?.dp && (
-                    <img
-                      src={activeWedding.dp}
-                      alt={activeWedding.title}
-                      className="w-8 h-8 rounded-lg object-cover border border-amber-300 shrink-0"
-                    />
-                  )}
-                  <select
-                    value={activeWedding?.id || ''}
-                    onChange={(e) =>
-                      updateState((prev) => ({ ...prev, activeWeddingId: e.target.value }))
-                    }
-                    className="w-full px-2.5 py-2 rounded-xl border border-stone-300 bg-white text-xs font-semibold text-stone-800 focus:ring-2 focus:ring-[#7A1C24]"
-                  >
-                    {activeDropdownWeddings.map((w) => (
-                      <option key={w.id} value={w.id}>
-                        {w.title}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : (
-                <div className="text-xs text-stone-500 italic py-1">No wedding plan yet</div>
-              )}
+        {/* Active Wedding Switcher (Hidden for Guest House users) */}
+        {!isGuestHouse && (
+          <div className="p-3 border-b border-stone-200/80 bg-stone-50/70">
+            {!sidebarCollapsed ? (
+              <>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-500 mb-1">
+                  Active Wedding Workspace
+                </label>
+                {accessibleWeddings.length > 0 ? (
+                  <div className="flex items-center gap-2">
+                    {activeWedding?.dp && (
+                      <img
+                        src={activeWedding.dp}
+                        alt={activeWedding.title}
+                        className="w-8 h-8 rounded-lg object-cover border border-amber-300 shrink-0"
+                      />
+                    )}
+                    <select
+                      value={activeWedding?.id || ''}
+                      onChange={(e) =>
+                        updateState((prev) => ({ ...prev, activeWeddingId: e.target.value }))
+                      }
+                      className="w-full px-2.5 py-2 rounded-xl border border-stone-300 bg-white text-xs font-semibold text-stone-800 focus:ring-2 focus:ring-[#7A1C24]"
+                    >
+                      {activeDropdownWeddings.map((w) => (
+                        <option key={w.id} value={w.id}>
+                          {w.title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div className="text-xs text-stone-500 italic py-1">No wedding plan yet</div>
+                )}
 
-              {canManageWeddings && (
+                {canManageWeddings && (
+                  <button
+                    onClick={() => {
+                      setEditingWedding(null);
+                      setWeddingModalOpen(true);
+                    }}
+                    className="mt-2 w-full py-1.5 px-2.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-[#7A1C24] border border-amber-300/80 text-xs font-semibold flex items-center justify-center gap-1.5 transition"
+                  >
+                    <Plus size={14} /> Add Wedding Plan
+                  </button>
+                )}
+              </>
+            ) : (
+              canManageWeddings && (
                 <button
                   onClick={() => {
                     setEditingWedding(null);
                     setWeddingModalOpen(true);
                   }}
-                  className="mt-2 w-full py-1.5 px-2.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-[#7A1C24] border border-amber-300/80 text-xs font-semibold flex items-center justify-center gap-1.5 transition"
+                  title="Add Wedding Plan"
+                  className="w-full py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-[#7A1C24] border border-amber-300/80 flex items-center justify-center transition"
                 >
-                  <Plus size={14} /> Add Wedding Plan
+                  <Plus size={16} />
                 </button>
-              )}
-            </>
-          ) : (
-            canManageWeddings && (
-              <button
-                onClick={() => {
-                  setEditingWedding(null);
-                  setWeddingModalOpen(true);
-                }}
-                title="Add Wedding Plan"
-                className="w-full py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-[#7A1C24] border border-amber-300/80 flex items-center justify-center transition"
-              >
-                <Plus size={16} />
-              </button>
-            )
-          )}
-        </div>
+              )
+            )}
+          </div>
+        )}
 
         {/* Navigation Links */}
         <nav className="flex-1 p-2.5 space-y-1 overflow-y-auto">
@@ -1622,8 +1624,8 @@ export default function App() {
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="font-bold text-sm sm:text-base text-stone-900 truncate">
-                  {isGuestHouse && !ghWeddingViewOptIn
-                    ? resolvedGuestHouseInfo.name || 'Guest House Operations'
+                  {isGuestHouse
+                    ? resolvedGuestHouseInfo.name || 'Guest House Dashboard'
                     : activeWedding
                     ? activeWedding.title
                     : 'AT Wedding Planner'}
@@ -1640,8 +1642,8 @@ export default function App() {
                 )}
               </div>
               <p className="text-[11px] text-stone-500 truncate">
-                {isGuestHouse && !ghWeddingViewOptIn
-                  ? 'Guest House Bookings, Hall Slots & Billing • Click "View Wedding" to inspect wedding details'
+                {isGuestHouse
+                  ? 'Weddings Bookings, Payment Updates & Billing'
                   : activeWedding
                   ? `${activeWedding.coupleNames || 'Wedding Workspace'}${
                       activeWedding.date ? ` • ${activeWedding.date}` : ''
@@ -1652,19 +1654,7 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {isGuestHouse && activeWedding && (
-              <button
-                type="button"
-                onClick={() => setGhWeddingViewOptIn((v) => !v)}
-                className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition ${
-                  ghWeddingViewOptIn
-                    ? 'bg-[#7A1C24] text-white border-[#7A1C24]'
-                    : 'bg-amber-50 text-[#7A1C24] border-amber-300 hover:bg-amber-100'
-                }`}
-              >
-                {ghWeddingViewOptIn ? 'Hide Wedding View' : 'View Wedding'}
-              </button>
-            )}
+
             {countdown !== null && (!isGuestHouse || ghWeddingViewOptIn) && (
               <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-300/80 text-[#7A1C24] text-xs font-bold">
                 <Clock size={14} />
@@ -1729,6 +1719,7 @@ export default function App() {
                 </button>
               </div>
 
+              {!isGuestHouse && (
               <div className="p-3 border-b border-stone-200 bg-stone-50">
                 <label className="block text-[10px] font-bold uppercase text-stone-500 mb-1">
                   Active Wedding
@@ -1764,6 +1755,7 @@ export default function App() {
                   </button>
                 )}
               </div>
+              )}
 
               <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
                 {visibleModules.map((mod) => {
@@ -1875,22 +1867,18 @@ export default function App() {
               recordAudit={recordAudit}
               showToast={showToast}
             />
-          ) : activeTab === 'bookings' && isGuestHouse ? (
-            <BookingsModule
+          ) : isGuestHouse ? (
+            <GuestHouseDashboard
+              activeWeddings={activeDropdownWeddings}
+              allWeddings={accessibleWeddings}
               bookings={guestHouseAllBookings}
-              allScopeBookings={guestHouseAllBookings}
+              events={state.events || []}
+              menu={state.menu || []}
               spaces={scopedSpaces}
               billTemplates={scopedBillTemplates}
-              weddingEvents={allWeddingEvents}
-              weddingMenu={state.menu.filter((m) => m.weddingId === activeWedding?.id)}
-              ghWeddingViewOptIn={ghWeddingViewOptIn}
-              onToggleWeddingView={() => setGhWeddingViewOptIn((v) => !v)}
-              activeWedding={activeWedding}
-              weddingId={activeWedding?.id || 'gh_direct'}
               currentUser={currentUser}
               resolvedGuestHouseInfo={resolvedGuestHouseInfo}
               defaultVenue={defaultVenueName}
-              perms={getModulePerms('bookings')}
               setState={updateState}
               stampUser={stampUser}
               recordAudit={recordAudit}
@@ -11035,6 +11023,883 @@ function BillTemplatesModule({
             <div className="text-right font-semibold text-stone-700 pt-2">
               {previewTpl.signatoryLabel || 'Authorized Signatory'}
             </div>
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+
+// ==========================================
+// DEDICATED GUEST HOUSE DASHBOARD & SCOPED WEDDING VIEW
+// ==========================================
+function GuestHouseDashboard({
+  activeWeddings = [],
+  allWeddings = [],
+  bookings = [],
+  events = [],
+  menu = [],
+  spaces = [],
+  billTemplates = [],
+  currentUser,
+  resolvedGuestHouseInfo,
+  defaultVenue = '',
+  setState,
+  stampUser,
+  recordAudit,
+  showToast,
+}) {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedWeddingId, setSelectedWeddingId] = useState('');
+  const [detailTab, setDetailTab] = useState('dashboard'); // 'dashboard' | 'events' | 'menu' | 'bookings'
+  const [paymentModalBookingId, setPaymentModalBookingId] = useState(null);
+  const [instAmount, setInstAmount] = useState('');
+  const [instMode, setInstMode] = useState('UPI');
+  const [instRef, setInstRef] = useState('');
+  const [instDate, setInstDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [manualAdvance, setManualAdvance] = useState('');
+  const [manualStatus, setManualStatus] = useState('Confirmed');
+  const [billPreviewBooking, setBillPreviewBooking] = useState(null);
+  const [selectedTplId, setSelectedTplId] = useState('');
+
+  const defaultTpl = useMemo(() => {
+    const list = billTemplates.length > 0 ? billTemplates : DEFAULT_BILL_TEMPLATES;
+    return list.find((t) => t.isDefault) || list[0];
+  }, [billTemplates]);
+
+  useEffect(() => {
+    if (defaultTpl && !selectedTplId) setSelectedTplId(defaultTpl.id);
+  }, [defaultTpl, selectedTplId]);
+
+  const activeTemplate = useMemo(() => {
+    const list = billTemplates.length > 0 ? billTemplates : DEFAULT_BILL_TEMPLATES;
+    return list.find((t) => t.id === selectedTplId) || defaultTpl;
+  }, [billTemplates, selectedTplId, defaultTpl]);
+
+  const weddingMap = useMemo(() => {
+    const m = {};
+    allWeddings.forEach((w) => {
+      m[w.id] = w;
+    });
+    return m;
+  }, [allWeddings]);
+
+  // All-field search across weddings and bookings
+  const matchesSearch = (w, b) => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return true;
+    const wText = w
+      ? [w.title, w.coupleNames, w.city, w.venue, w.date, w.status].filter(Boolean).join(' ')
+      : '';
+    const bText = b
+      ? [
+          b.title,
+          b.category,
+          Array.isArray(b.categories) ? b.categories.join(' ') : '',
+          b.vendorName,
+          b.phone,
+          b.altPhone,
+          b.location,
+          b.spaceName,
+          b.slot,
+          b.eventTag,
+          b.serviceDate,
+          b.status,
+          b.receiptNo,
+          b.paymentMode,
+          b.notes,
+        ]
+          .filter(Boolean)
+          .join(' ')
+      : '';
+    return `${wText} ${bText}`.toLowerCase().includes(q);
+  };
+
+  const filteredActiveWeddings = useMemo(() => {
+    return activeWeddings.filter((w) => {
+      const wedBookings = bookings.filter((b) => b.weddingId === w.id);
+      return matchesSearch(w, null) || wedBookings.some((b) => matchesSearch(w, b));
+    });
+  }, [activeWeddings, bookings, searchQuery]);
+
+  const filteredBookings = useMemo(() => {
+    return bookings.filter((b) => matchesSearch(weddingMap[b.weddingId] || null, b));
+  }, [bookings, weddingMap, searchQuery]);
+
+  // Bookings & Wedding KPIs ONLY
+  const totalBookingValue = filteredBookings.reduce(
+    (sum, b) => sum + (Number(b.totalAmount) || 0),
+    0
+  );
+  const totalPaid = filteredBookings.reduce((sum, b) => sum + (Number(b.advancePaid) || 0), 0);
+  const totalDue = filteredBookings.reduce(
+    (sum, b) => sum + Math.max(0, (Number(b.totalAmount) || 0) - (Number(b.advancePaid) || 0)),
+    0
+  );
+
+  const selectedWedding = useMemo(() => {
+    if (!selectedWeddingId) return null;
+    return activeWeddings.find((w) => w.id === selectedWeddingId) || null;
+  }, [selectedWeddingId, activeWeddings]);
+
+  const openPaymentUpdater = (b) => {
+    setPaymentModalBookingId(b.id);
+    setInstAmount('');
+    setInstMode(b.paymentMode || 'UPI');
+    setInstRef('');
+    setInstDate(new Date().toISOString().slice(0, 10));
+    setManualAdvance(String(b.advancePaid ?? 0));
+    setManualStatus(b.status || 'Confirmed');
+  };
+
+  const paymentBooking = useMemo(
+    () => bookings.find((b) => b.id === paymentModalBookingId) || null,
+    [bookings, paymentModalBookingId]
+  );
+
+  const handleAddInstallmentToBooking = (e) => {
+    e.preventDefault();
+    if (!paymentBooking) return;
+    const amt = Number(instAmount) || 0;
+    const newInst =
+      amt > 0
+        ? [
+            ...(paymentBooking.installments || []),
+            {
+              id: uid('inst'),
+              date: instDate || new Date().toISOString().slice(0, 10),
+              amount: amt,
+              mode: instMode || 'UPI',
+              ref: instRef.trim(),
+            },
+          ]
+        : paymentBooking.installments || [];
+    const instSum = newInst.reduce((s, x) => s + (Number(x.amount) || 0), 0);
+    const nextPaid = amt > 0 ? Math.max(instSum, Number(manualAdvance) || 0) : Number(manualAdvance) || 0;
+
+    setState((prev) => ({
+      ...prev,
+      bookings: (prev.bookings || []).map((b) =>
+        b.id === paymentBooking.id
+          ? {
+              ...b,
+              installments: newInst,
+              advancePaid: nextPaid,
+              paymentMode: instMode || b.paymentMode || 'UPI',
+              status: manualStatus || b.status,
+              ...stampUser(b),
+            }
+          : b
+      ),
+    }));
+    recordAudit(
+      'Bookings',
+      'Payment Updated',
+      `Updated payment for "${paymentBooking.title}" (Paid: ${formatINR(nextPaid)})`,
+      paymentBooking.weddingId
+    );
+    showToast('Payment details updated');
+    setPaymentModalBookingId(null);
+  };
+
+  const handleSaveManualPaymentOnly = () => {
+    if (!paymentBooking) return;
+    const nextPaid = Math.max(0, Number(manualAdvance) || 0);
+    setState((prev) => ({
+      ...prev,
+      bookings: (prev.bookings || []).map((b) =>
+        b.id === paymentBooking.id
+          ? {
+              ...b,
+              advancePaid: nextPaid,
+              paymentMode: instMode || b.paymentMode || 'UPI',
+              status: manualStatus || b.status,
+              ...stampUser(b),
+            }
+          : b
+      ),
+    }));
+    recordAudit(
+      'Bookings',
+      'Payment Updated',
+      `Updated advance to ${formatINR(nextPaid)} for "${paymentBooking.title}"`,
+      paymentBooking.weddingId
+    );
+    showToast('Payment details saved');
+    setPaymentModalBookingId(null);
+  };
+
+  const formatBillOutput = (item, tpl = activeTemplate) => {
+    const wed = weddingMap[item.weddingId] || selectedWedding;
+    const total = Number(item.totalAmount) || 0;
+    const paid = Number(item.advancePaid) || 0;
+    const due = Math.max(0, total - paid);
+    const ghName =
+      tpl?.businessName ||
+      item.guestHouseName ||
+      resolvedGuestHouseInfo?.name ||
+      defaultVenue ||
+      'Guest House';
+    const rcpCode = item.receiptNo || item.id.slice(-8).toUpperCase();
+    const catsList =
+      Array.isArray(item.categories) && item.categories.length > 0
+        ? item.categories.join(', ')
+        : item.category || '';
+
+    const itemsArr =
+      Array.isArray(item.lineItems) && item.lineItems.length > 0
+        ? item.lineItems.map(
+            (li) => `• ${li.label}: ${li.qty} × ${formatINR(li.rate)} = ${formatINR(li.amount)}`
+          )
+        : [`• ${item.title}: ${formatINR(total)}`];
+
+    const discVal = Number(item.discountValue) || 0;
+    const discLine =
+      discVal > 0
+        ? `Discount (${item.discountType === 'percent' ? `${discVal}%` : 'Flat'}): ${
+            item.discountType === 'percent' ? `${discVal}%` : formatINR(discVal)
+          }`
+        : '';
+
+    const taxLine = item.gstEnabled
+      ? `Tax: CGST ${Number(item.cgstRate) || 0}% + SGST ${Number(item.sgstRate) || 0}%`
+      : '';
+
+    return [
+      `BILL RECEIPT — ${ghName}`,
+      tpl?.tagline || '',
+      `Receipt No: ${rcpCode} | Date: ${item.bookingDate || new Date().toISOString().slice(0, 10)}`,
+      tpl?.gstin || resolvedGuestHouseInfo?.gstin
+        ? `GSTIN: ${tpl?.gstin || resolvedGuestHouseInfo?.gstin}${
+            tpl?.sacCode ? ` | SAC: ${tpl.sacCode}` : ''
+          }`
+        : '',
+      '----------------------------------------',
+      `Booking: ${item.title}`,
+      catsList ? `Categories: ${catsList}` : '',
+      wed?.title ? `Wedding: ${wed.title}` : '',
+      `Client/Vendor: ${item.vendorName || '-'} | Phone: ${item.phone || '-'}`,
+      `Venue/Hall: ${item.spaceName || item.location || ghName}`,
+      `Date: ${item.serviceDate || 'TBD'} | Slot: ${item.slot || 'Full Day'}${
+        item.expectedPax > 0 ? ` | Pax: ${item.expectedPax}` : ''
+      }`,
+      '----------------------------------------',
+      'CHARGES & ITEMS:',
+      ...itemsArr,
+      discLine,
+      taxLine,
+      '----------------------------------------',
+      `Total Amount: ${formatINR(total)}`,
+      `Advance Paid (${item.paymentMode || 'UPI'}): ${formatINR(paid)}`,
+      `Balance Due: ${formatINR(due)}`,
+      `Status: ${item.status || 'Confirmed'}`,
+      tpl?.upiId ? `UPI ID: ${tpl.upiId}` : '',
+      tpl?.bankDetails ? `Bank: ${tpl.bankDetails}` : '',
+      tpl?.terms ? `Terms:\n${tpl.terms}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+  };
+
+  const shareBillWhatsApp = (item) => {
+    const text = formatBillOutput(item, activeTemplate);
+    const cleanPhone = String(item.phone || '').replace(/\D/g, '');
+    const waUrl =
+      cleanPhone.length >= 10
+        ? `https://wa.me/${cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone}?text=${encodeURIComponent(
+            text
+          )}`
+        : `https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.open(waUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  // SCOPED VIEW FOR A SINGLE SELECTED ACTIVE WEDDING
+  if (selectedWedding) {
+    const wedBookings = bookings.filter(
+      (b) => b.weddingId === selectedWedding.id && matchesSearch(selectedWedding, b)
+    );
+    const wedEvents = events.filter(
+      (e) =>
+        e.weddingId === selectedWedding.id &&
+        (!searchQuery.trim() ||
+          [e.name, e.date, e.time, e.venue, e.dressCode, e.notes]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase()
+            .includes(searchQuery.trim().toLowerCase()))
+    );
+    const wedMenu = menu.filter(
+      (m) =>
+        m.weddingId === selectedWedding.id &&
+        (!searchQuery.trim() ||
+          [m.dishName, m.event, m.course, m.dietaryTag, m.status, m.notes]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase()
+            .includes(searchQuery.trim().toLowerCase()))
+    );
+
+    const wTotal = wedBookings.reduce((s, b) => s + (Number(b.totalAmount) || 0), 0);
+    const wPaid = wedBookings.reduce((s, b) => s + (Number(b.advancePaid) || 0), 0);
+    const wDue = wedBookings.reduce(
+      (s, b) => s + Math.max(0, (Number(b.totalAmount) || 0) - (Number(b.advancePaid) || 0)),
+      0
+    );
+
+    return (
+      <div className="space-y-5">
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-stone-200 shadow-xs">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedWeddingId('');
+                setDetailTab('dashboard');
+              }}
+              className="px-3 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-bold shrink-0"
+            >
+              ← Back to Dashboard
+            </button>
+            <div className="min-w-0">
+              <h2 className="text-lg sm:text-xl font-bold text-stone-900 truncate">
+                {selectedWedding.title}
+              </h2>
+              <p className="text-xs text-stone-500 truncate">
+                {selectedWedding.coupleNames || 'Wedding'}
+                {selectedWedding.date ? ` • ${selectedWedding.date}` : ''}
+                {selectedWedding.venue ? ` • ${selectedWedding.venue}` : ''}
+              </p>
+            </div>
+          </div>
+
+          <div className="relative w-full sm:w-64">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search all fields..."
+              className="w-full pl-8 pr-3 py-2 border border-stone-300 rounded-xl text-xs"
+            />
+          </div>
+        </div>
+
+        {/* Scoped Tabs for Selected Wedding Only */}
+        <div className="flex flex-wrap gap-2">
+          {[
+            { key: 'dashboard', label: 'Wedding Dashboard' },
+            { key: 'events', label: `Events (${wedEvents.length})` },
+            { key: 'menu', label: `Menu (${wedMenu.length})` },
+            { key: 'bookings', label: `Booking Details & Bill (${wedBookings.length})` },
+          ].map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setDetailTab(t.key)}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition ${
+                detailTab === t.key
+                  ? 'bg-[#7A1C24] text-white shadow-xs'
+                  : 'bg-white text-stone-700 border border-stone-200 hover:bg-stone-50'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {detailTab === 'dashboard' && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="bg-white rounded-2xl border border-stone-200 p-4">
+                <div className="text-xs font-semibold text-stone-500">Wedding Bookings</div>
+                <div className="text-2xl font-bold text-stone-900 mt-1">{wedBookings.length}</div>
+              </div>
+              <div className="bg-white rounded-2xl border border-stone-200 p-4">
+                <div className="text-xs font-semibold text-stone-500">Booking Value</div>
+                <div className="text-2xl font-bold text-stone-900 mt-1">{formatINR(wTotal)}</div>
+              </div>
+              <div className="bg-white rounded-2xl border border-stone-200 p-4">
+                <div className="text-xs font-semibold text-stone-500">Paid / Received</div>
+                <div className="text-2xl font-bold text-emerald-700 mt-1">{formatINR(wPaid)}</div>
+              </div>
+              <div className="bg-white rounded-2xl border border-stone-200 p-4">
+                <div className="text-xs font-semibold text-stone-500">Balance Due</div>
+                <div className="text-2xl font-bold text-amber-700 mt-1">{formatINR(wDue)}</div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-stone-200 p-5 space-y-2 text-xs">
+              <h3 className="font-bold text-sm text-stone-900">Wedding Overview</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-stone-700">
+                <div><strong>Title:</strong> {selectedWedding.title}</div>
+                <div><strong>Couple:</strong> {selectedWedding.coupleNames || '—'}</div>
+                <div><strong>Date:</strong> {selectedWedding.date || '—'}</div>
+                <div><strong>Venue / City:</strong> {selectedWedding.venue || '—'} {selectedWedding.city ? `(${selectedWedding.city})` : ''}</div>
+                <div><strong>Events:</strong> {wedEvents.length}</div>
+                <div><strong>Menu Dishes:</strong> {wedMenu.length}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {detailTab === 'events' && (
+          <div className="bg-white rounded-2xl border border-stone-200 p-5 space-y-3">
+            <h3 className="font-bold text-sm text-stone-900">Wedding Events</h3>
+            {wedEvents.length === 0 ? (
+              <p className="text-xs text-stone-500 py-6 text-center">No events found for this wedding.</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {wedEvents.map((ev) => (
+                  <div key={ev.id} className="p-3.5 rounded-xl bg-stone-50 border border-stone-200 text-xs space-y-1">
+                    <div className="font-bold text-stone-900">{ev.name}</div>
+                    <div className="text-stone-600">
+                      {ev.date || 'Date TBD'} {ev.time ? `• ${ev.time}` : ''} {ev.venue ? `• ${ev.venue}` : ''}
+                    </div>
+                    {ev.dressCode && <div className="text-stone-500">Dress Code: {ev.dressCode}</div>}
+                    {ev.notes && <div className="text-stone-500">{ev.notes}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {detailTab === 'menu' && (
+          <div className="bg-white rounded-2xl border border-stone-200 p-5 space-y-3">
+            <h3 className="font-bold text-sm text-stone-900">Wedding Menu</h3>
+            {wedMenu.length === 0 ? (
+              <p className="text-xs text-stone-500 py-6 text-center">No menu dishes found for this wedding.</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {wedMenu.map((dish) => (
+                  <div key={dish.id} className="p-3.5 rounded-xl bg-stone-50 border border-stone-200 text-xs flex items-start justify-between gap-2">
+                    <div>
+                      <div className="font-bold text-stone-900">{dish.dishName}</div>
+                      <div className="text-stone-500">
+                        {dish.event || 'Event'} • {dish.course || 'Course'} • {dish.dietaryTag || 'Veg'}
+                      </div>
+                      {dish.notes && <div className="text-stone-600 mt-0.5">{dish.notes}</div>}
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full bg-amber-100 text-[#7A1C24] font-bold text-[10px]">
+                      {dish.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {detailTab === 'bookings' && (
+          <div className="space-y-3">
+            {wedBookings.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-stone-200 p-8 text-center text-xs text-stone-500">
+                No bookings found for this wedding.
+              </div>
+            ) : (
+              wedBookings.map((b) => {
+                const due = Math.max(0, (Number(b.totalAmount) || 0) - (Number(b.advancePaid) || 0));
+                const cats =
+                  Array.isArray(b.categories) && b.categories.length > 0
+                    ? b.categories.join(', ')
+                    : b.category || '';
+                return (
+                  <div
+                    key={b.id}
+                    className="bg-white rounded-2xl border border-stone-200 p-4 shadow-xs flex flex-wrap items-center justify-between gap-4 text-xs"
+                  >
+                    <div className="space-y-1">
+                      <div className="font-bold text-sm text-stone-900">{b.title}</div>
+                      {cats && <div className="text-[#7A1C24] font-semibold">{cats}</div>}
+                      <div className="text-stone-600">
+                        {b.vendorName ? `${b.vendorName} • ` : ''}
+                        {b.phone ? `${b.phone} • ` : ''}
+                        {b.spaceName || b.location || ''} • {b.serviceDate || 'TBD'} ({b.slot || 'Full Day'})
+                      </div>
+                      <div className="font-semibold text-stone-800 pt-0.5">
+                        Total: {formatINR(b.totalAmount)} | Paid: {formatINR(b.advancePaid)} ({b.paymentMode || 'UPI'}) | Due:{' '}
+                        <span className="text-amber-700 font-bold">{formatINR(due)}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openPaymentUpdater(b)}
+                        className="px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold"
+                      >
+                        Update Payment
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBillPreviewBooking(b)}
+                        className="px-3 py-2 rounded-xl bg-[#7A1C24] hover:bg-[#5E141B] text-white font-bold"
+                      >
+                        View Bill
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // DEFAULT GUEST HOUSE DASHBOARD VIEW
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold text-stone-900">Guest House Bookings Dashboard</h2>
+          <p className="text-xs text-stone-500">
+            Search across all fields, update payment details, and open any active wedding.
+          </p>
+        </div>
+
+        <div className="relative w-full sm:w-80">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search weddings, bookings, phone, hall, status..."
+            className="w-full pl-9 pr-3 py-2.5 border border-stone-300 bg-white rounded-xl text-xs shadow-2xs"
+          />
+        </div>
+      </div>
+
+      {/* Weddings & Bookings KPIs ONLY */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="bg-white rounded-2xl border border-stone-200 p-4 shadow-xs">
+          <div className="text-xs font-semibold text-stone-500">ACTIVE WEDDINGS</div>
+          <div className="text-2xl font-bold text-stone-900 mt-1">
+            {filteredActiveWeddings.length}
+          </div>
+        </div>
+        <div className="bg-white rounded-2xl border border-stone-200 p-4 shadow-xs">
+          <div className="text-xs font-semibold text-stone-500">TOTAL BOOKINGS</div>
+          <div className="text-2xl font-bold text-[#7A1C24] mt-1">{filteredBookings.length}</div>
+        </div>
+        <div className="bg-white rounded-2xl border border-stone-200 p-4 shadow-xs">
+          <div className="text-xs font-semibold text-stone-500">BOOKING VALUE &amp; PAID</div>
+          <div className="text-lg font-bold text-stone-900 mt-1">
+            {formatINR(totalBookingValue)}
+          </div>
+          <div className="text-xs font-semibold text-emerald-700 mt-0.5">
+            Paid: {formatINR(totalPaid)}
+          </div>
+        </div>
+        <div className="bg-white rounded-2xl border border-stone-200 p-4 shadow-xs">
+          <div className="text-xs font-semibold text-stone-500">BALANCE DUE</div>
+          <div className="text-2xl font-bold text-amber-700 mt-1">{formatINR(totalDue)}</div>
+        </div>
+      </div>
+
+      {/* Active Weddings List */}
+      <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-xs space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-sm text-stone-900">
+            Active Weddings ({filteredActiveWeddings.length})
+          </h3>
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="text-xs font-semibold text-[#7A1C24] hover:underline"
+            >
+              Clear Search
+            </button>
+          )}
+        </div>
+
+        {filteredActiveWeddings.length === 0 ? (
+          <p className="text-xs text-stone-500 py-6 text-center">
+            No active weddings match your search.
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {filteredActiveWeddings.map((w) => {
+              const wCount = bookings.filter((b) => b.weddingId === w.id).length;
+              return (
+                <div
+                  key={w.id}
+                  onClick={() => {
+                    setSelectedWeddingId(w.id);
+                    setDetailTab('dashboard');
+                  }}
+                  className="p-4 rounded-xl border border-stone-200 hover:border-[#7A1C24] bg-stone-50/50 hover:bg-amber-50/30 cursor-pointer transition flex items-center justify-between gap-3"
+                >
+                  <div className="min-w-0">
+                    <div className="font-bold text-sm text-stone-900 truncate">{w.title}</div>
+                    <div className="text-xs text-stone-600 truncate">
+                      {w.coupleNames || w.city || 'Active Wedding'}
+                    </div>
+                    <div className="text-[11px] text-stone-500 mt-0.5">
+                      {w.date || 'Date TBD'} • {wCount} {wCount === 1 ? 'Booking' : 'Bookings'}
+                    </div>
+                  </div>
+                  <span className="px-3 py-1.5 rounded-lg bg-[#7A1C24] text-white text-xs font-semibold shrink-0">
+                    Open
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Bookings & Payment Updates List */}
+      <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-xs space-y-3">
+        <h3 className="font-bold text-sm text-stone-900">
+          Bookings &amp; Payment Details ({filteredBookings.length})
+        </h3>
+
+        {filteredBookings.length === 0 ? (
+          <p className="text-xs text-stone-500 py-6 text-center">No bookings found.</p>
+        ) : (
+          <div className="divide-y divide-stone-100">
+            {filteredBookings.map((b) => {
+              const wed = weddingMap[b.weddingId];
+              const due = Math.max(0, (Number(b.totalAmount) || 0) - (Number(b.advancePaid) || 0));
+              const cats =
+                Array.isArray(b.categories) && b.categories.length > 0
+                  ? b.categories.join(', ')
+                  : b.category || '';
+              return (
+                <div
+                  key={b.id}
+                  className="py-3.5 flex flex-wrap items-center justify-between gap-3 text-xs"
+                >
+                  <div className="space-y-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-bold text-sm text-stone-900">{b.title}</span>
+                      {wed?.title && (
+                        <span className="px-2 py-0.5 rounded-full bg-amber-100 text-[#7A1C24] font-bold text-[10px]">
+                          {wed.title}
+                        </span>
+                      )}
+                      <span className="px-2 py-0.5 rounded-full bg-stone-100 text-stone-700 font-semibold text-[10px]">
+                        {b.status || 'Confirmed'}
+                      </span>
+                    </div>
+                    {cats && <div className="text-stone-600 font-medium">{cats}</div>}
+                    <div className="text-stone-500">
+                      {b.vendorName ? `${b.vendorName} • ` : ''}
+                      {b.phone ? `${b.phone} • ` : ''}
+                      {b.spaceName || b.location || ''} • {b.serviceDate || 'TBD'} ({b.slot || 'Full Day'})
+                    </div>
+                    <div className="font-semibold text-stone-800">
+                      Total: {formatINR(b.totalAmount)} | Paid:{' '}
+                      <span className="text-emerald-700">{formatINR(b.advancePaid)}</span> (
+                      {b.paymentMode || 'UPI'}) | Due:{' '}
+                      <span className="text-amber-700 font-bold">{formatINR(due)}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => openPaymentUpdater(b)}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold"
+                    >
+                      Update Payment
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBillPreviewBooking(b)}
+                      className="px-3 py-1.5 rounded-lg bg-[#7A1C24] hover:bg-[#5E141B] text-white font-bold"
+                    >
+                      Bill
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Payment Details Update Modal */}
+      <Modal
+        isOpen={Boolean(paymentBooking)}
+        onClose={() => setPaymentModalBookingId(null)}
+        title="Update Payment Details"
+        subtitle={paymentBooking?.title}
+      >
+        {paymentBooking && (
+          <form onSubmit={handleAddInstallmentToBooking} className="space-y-4 text-xs">
+            <div className="p-3 rounded-xl bg-stone-50 border border-stone-200 flex flex-wrap justify-between gap-2">
+              <span><strong>Total:</strong> {formatINR(paymentBooking.totalAmount)}</span>
+              <span className="text-emerald-700"><strong>Paid:</strong> {formatINR(paymentBooking.advancePaid)}</span>
+              <span className="text-amber-700">
+                <strong>Due:</strong>{' '}
+                {formatINR(
+                  Math.max(
+                    0,
+                    (Number(paymentBooking.totalAmount) || 0) -
+                      (Number(paymentBooking.advancePaid) || 0)
+                  )
+                )}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block font-semibold text-stone-700 mb-1">
+                  Total Paid / Advance Amount (₹)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={manualAdvance}
+                  onChange={(e) => setManualAdvance(e.target.value)}
+                  className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+                />
+              </div>
+              <div>
+                <label className="block font-semibold text-stone-700 mb-1">Payment Status</label>
+                <select
+                  value={manualStatus}
+                  onChange={(e) => setManualStatus(e.target.value)}
+                  className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm bg-white"
+                >
+                  {BOOKING_STATUSES.map((st) => (
+                    <option key={st} value={st}>
+                      {st}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-emerald-50/50 border border-emerald-200 space-y-2.5">
+              <div className="font-bold text-stone-800">Record New Payment Installment</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-[11px] font-semibold text-stone-600 mb-0.5">
+                    Installment Amount (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={instAmount}
+                    onChange={(e) => setInstAmount(e.target.value)}
+                    placeholder="0"
+                    className="w-full px-2.5 py-1.5 border border-stone-300 bg-white rounded-lg text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-stone-600 mb-0.5">
+                    Payment Mode
+                  </label>
+                  <select
+                    value={instMode}
+                    onChange={(e) => setInstMode(e.target.value)}
+                    className="w-full px-2.5 py-1.5 border border-stone-300 bg-white rounded-lg text-xs"
+                  >
+                    {PAYMENT_MODES.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-stone-600 mb-0.5">
+                    Payment Date
+                  </label>
+                  <input
+                    type="date"
+                    value={instDate}
+                    onChange={(e) => setInstDate(e.target.value)}
+                    className="w-full px-2.5 py-1.5 border border-stone-300 bg-white rounded-lg text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-stone-600 mb-0.5">
+                    UTR / Receipt Ref
+                  </label>
+                  <input
+                    type="text"
+                    value={instRef}
+                    onChange={(e) => setInstRef(e.target.value)}
+                    placeholder="Optional reference"
+                    className="w-full px-2.5 py-1.5 border border-stone-300 bg-white rounded-lg text-xs"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {(paymentBooking.installments || []).length > 0 && (
+              <div className="divide-y divide-stone-100 border border-stone-200 rounded-xl bg-white">
+                {paymentBooking.installments.map((inst) => (
+                  <div key={inst.id} className="px-3 py-2 flex items-center justify-between">
+                    <span>
+                      {inst.date} • {inst.mode} {inst.ref ? `(${inst.ref})` : ''}
+                    </span>
+                    <span className="font-bold text-emerald-700">{formatINR(inst.amount)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex flex-wrap justify-end gap-2 pt-3 border-t border-stone-200">
+              <button
+                type="button"
+                onClick={handleSaveManualPaymentOnly}
+                className="px-3.5 py-2 rounded-lg bg-stone-800 text-white font-semibold"
+              >
+                Save Paid &amp; Status
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-lg bg-emerald-700 text-white font-semibold"
+              >
+                Add Installment &amp; Save
+              </button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      {/* Bill Preview Modal */}
+      <Modal
+        isOpen={Boolean(billPreviewBooking)}
+        onClose={() => setBillPreviewBooking(null)}
+        title="Booking Bill"
+        subtitle={billPreviewBooking?.title}
+        maxWidth="max-w-xl"
+      >
+        {billPreviewBooking && activeTemplate && (
+          <div className="space-y-3 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2 bg-stone-50 p-3 rounded-xl border border-stone-200">
+              <select
+                value={selectedTplId}
+                onChange={(e) => setSelectedTplId(e.target.value)}
+                className="px-2.5 py-1.5 border border-stone-300 bg-white rounded-lg text-xs font-semibold"
+              >
+                {(billTemplates.length > 0 ? billTemplates : DEFAULT_BILL_TEMPLATES).map(
+                  (tpl) => (
+                    <option key={tpl.id} value={tpl.id}>
+                      {tpl.name}
+                    </option>
+                  )
+                )}
+              </select>
+              <button
+                type="button"
+                onClick={() => shareBillWhatsApp(billPreviewBooking)}
+                className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold inline-flex items-center gap-1"
+              >
+                <Share2 size={13} /> Share on WhatsApp
+              </button>
+            </div>
+            <pre className="p-4 rounded-xl bg-white border border-stone-300 whitespace-pre-wrap font-mono text-xs text-stone-800">
+              {formatBillOutput(billPreviewBooking, activeTemplate)}
+            </pre>
           </div>
         )}
       </Modal>
