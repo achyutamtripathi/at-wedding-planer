@@ -1016,7 +1016,7 @@ export default function App() {
     if (!currentUser) return { id: '', name: '', city: '', address: '', phone: '', gstin: '' };
     if (currentUser.role === 'guest_house') {
       return {
-        id: currentUser.id,
+        id: currentUser?.id,
         name: currentUser.guestHouseName || currentUser.name || '',
         city: currentUser.city || '',
         address: currentUser.address || '',
@@ -1058,7 +1058,7 @@ export default function App() {
     if (isSuperAdmin) return state.weddings;
     if (isGuestHouse) {
       return state.weddings.filter(
-        (w) => w.ownerUserId === currentUser.id || w.guestHouseId === currentUser.id
+        (w) => w.ownerUserId === currentUser?.id || w.guestHouseId === currentUser?.id
       );
     }
     const allowedIds = Array.isArray(currentUser.assignedWeddingIds)
@@ -1141,7 +1141,7 @@ export default function App() {
       id: uid('log'),
       weddingId: targetWeddingId,
       weddingTitle: targetWedding?.title || 'System',
-      userId: currentUser.id,
+      userId: currentUser?.id,
       userName: currentUser.name,
       userAvatar: currentUser.avatar || '',
       userRole: currentUser.role,
@@ -1190,8 +1190,8 @@ export default function App() {
       const newWedding = {
         id: uid('wed'),
         ...form,
-        ownerUserId: currentUser.id,
-        guestHouseId: isGuestHouse ? currentUser.id : resolvedGuestHouseInfo.id || '',
+        ownerUserId: currentUser?.id,
+        guestHouseId: isGuestHouse ? currentUser?.id : resolvedGuestHouseInfo.id || '',
         guestHouseName: isGuestHouse
           ? currentUser.guestHouseName || currentUser.name
           : resolvedGuestHouseInfo.name || '',
@@ -1261,16 +1261,16 @@ export default function App() {
     return (state.bookings || []).filter(
       (b) => myWedIds.has(b.weddingId) || b.ownerUserId === currentUser?.id
     );
-  }, [isSuperAdmin, state.bookings, accessibleWeddings, currentUser.id]);
+  }, [isSuperAdmin, state.bookings, accessibleWeddings, currentUser?.id]);
 
   const scopedBillTemplates = useMemo(() => {
     const all = Array.isArray(state.billTemplates) && state.billTemplates.length > 0
       ? state.billTemplates
       : DEFAULT_BILL_TEMPLATES;
     if (isSuperAdmin) return all;
-    const ownerId = isGuestHouse ? currentUser.id : resolvedGuestHouseInfo.id;
+    const ownerId = isGuestHouse ? currentUser?.id : resolvedGuestHouseInfo.id;
     return all.filter((t) => t.ownerUserId === 'system' || t.ownerUserId === ownerId);
-  }, [state.billTemplates, isSuperAdmin, isGuestHouse, currentUser.id, resolvedGuestHouseInfo.id]);
+  }, [state.billTemplates, isSuperAdmin, isGuestHouse, currentUser?.id, resolvedGuestHouseInfo.id]);
 
   if (!currentUser) {
     return (
