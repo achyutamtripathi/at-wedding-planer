@@ -48,6 +48,15 @@ import {
   Cloud,
   CloudOff,
   RefreshCw,
+  FileText,
+  Printer,
+  BedDouble,
+  AlertTriangle,
+  Receipt,
+  Sparkles,
+  CopyPlus,
+  CheckCircle2,
+  ClipboardList,
 } from 'lucide-react';
 
 // ==========================================
@@ -178,6 +187,57 @@ const MODULES = [
   { key: 'menu', label: 'Menu List', icon: Utensils },
   { key: 'expenses', label: 'Expenses', icon: Wallet },
   { key: 'tasks', label: 'Work Balancing', icon: CheckSquare },
+  { key: 'bill_templates', label: 'Bill Templates', icon: FileText },
+];
+
+// Client-private modules that a Guest House user cannot open on client weddings
+const CLIENT_PRIVATE_MODULES = ['guests', 'invites', 'expenses', 'tasks'];
+
+const BOOKING_SLOTS = ['Full Day (24 Hrs)', 'Day / Morning', 'Night / Evening'];
+
+const DEFAULT_BILL_TEMPLATES = [
+  {
+    id: 'tpl_gst_tax_invoice',
+    name: 'GST Tax Invoice (Standard Banquet & Rooms)',
+    style: 'classic',
+    businessName: '',
+    tagline: 'Banquet Hall, Lawn & Luxury Guest House',
+    address: '',
+    phone: '',
+    email: '',
+    gstin: '',
+    sacCode: '996311',
+    defaultCgst: 9,
+    defaultSgst: 9,
+    upiId: '',
+    bankDetails: '',
+    signatoryLabel: 'Authorized Signatory',
+    terms:
+      '1. 50% advance required at the time of booking confirmation.\n2. Balance settlement due 24 hours prior to the event.\n3. Electricity backup / generator charges as per actual usage if outside package.',
+    isDefault: true,
+    ownerUserId: 'system',
+  },
+  {
+    id: 'tpl_token_receipt',
+    name: 'Token / Advance Payment Receipt',
+    style: 'compact',
+    businessName: '',
+    tagline: 'Official Booking & Advance Acknowledgement',
+    address: '',
+    phone: '',
+    email: '',
+    gstin: '',
+    sacCode: '996311',
+    defaultCgst: 0,
+    defaultSgst: 0,
+    upiId: '',
+    bankDetails: '',
+    signatoryLabel: 'Cashier / Manager',
+    terms:
+      'Token amount is non-refundable upon cancellation within 30 days of event date. Date shift subject to hall availability.',
+    isDefault: false,
+    ownerUserId: 'system',
+  },
 ];
 
 const EVENT_PRESETS = [
@@ -311,6 +371,8 @@ const DEFAULT_STATE = {
   menu: [],
   expenses: [],
   tasks: [],
+  spaces: [],
+  billTemplates: DEFAULT_BILL_TEMPLATES,
   auditLogs: [],
 };
 
@@ -778,6 +840,11 @@ export default function App() {
             menu: Array.isArray(parsed.menu) ? parsed.menu : [],
             expenses: Array.isArray(parsed.expenses) ? parsed.expenses : [],
             tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
+            spaces: Array.isArray(parsed.spaces) ? parsed.spaces : [],
+            billTemplates:
+              Array.isArray(parsed.billTemplates) && parsed.billTemplates.length > 0
+                ? parsed.billTemplates
+                : DEFAULT_BILL_TEMPLATES,
             auditLogs: Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [],
           };
         }
@@ -813,6 +880,7 @@ export default function App() {
       // ignore storage errors
     }
   }, [sidebarCollapsed]);
+
   const [toast, setToast] = useState(null);
   const [weddingModalOpen, setWeddingModalOpen] = useState(false);
   const [editingWedding, setEditingWedding] = useState(null);
@@ -858,6 +926,10 @@ export default function App() {
           setState((prev) => ({
             ...DEFAULT_STATE,
             ...data.payload,
+            billTemplates:
+              Array.isArray(data.payload.billTemplates) && data.payload.billTemplates.length > 0
+                ? data.payload.billTemplates
+                : DEFAULT_BILL_TEMPLATES,
             activeWeddingId: prev.activeWeddingId || data.payload.activeWeddingId || '',
           }));
         }
@@ -882,6 +954,11 @@ export default function App() {
             setState((prev) => ({
               ...DEFAULT_STATE,
               ...payload.new.payload,
+              billTemplates:
+                Array.isArray(payload.new.payload.billTemplates) &&
+                payload.new.payload.billTemplates.length > 0
+                  ? payload.new.payload.billTemplates
+                  : DEFAULT_BILL_TEMPLATES,
               activeWeddingId: prev.activeWeddingId || payload.new.payload.activeWeddingId || '',
             }));
           }
@@ -942,17 +1019,64 @@ export default function App() {
   }, [state.users, currentUserId]);
 
   const isSuperAdmin = currentUser?.role === 'super_admin';
+  const isGuestHouse = currentUser?.role === 'guest_house';
   const isSubAdmin = currentUser?.role === 'sub_admin';
 
-  // Accessible weddings for current user
+  // Resolve Guest House affiliation & default venue for current user
+  const resolvedGuestHouseInfo = useMemo(() => {
+    if (!currentUser) return { id: '', name: '', city: '', address: '', phone: '', gstin: '' };
+    if (currentUser.role === 'guest_house') {
+      return {
+        id: currentUser.id,
+        name: currentUser.guestHouseName || currentUser.name || '',
+        city: currentUser.city || '',
+        address: currentUser.address || '',
+        phone: currentUser.phone || '',
+        gstin: currentUser.gstin || '',
+      };
+    }
+    if (currentUser.guestHouseId) {
+      const gh = (state.users || []).find((u) => u.id === currentUser.guestHouseId);
+      if (gh) {
+        return {
+          id: gh.id,
+          name: gh.guestHouseName || currentUser.guestHouseName || gh.name || '',
+          city: gh.city || '',
+          address: gh.address || '',
+          phone: gh.phone || '',
+          gstin: gh.gstin || '',
+        };
+      }
+    }
+    return {
+      id: currentUser.guestHouseId || '',
+      name: currentUser.guestHouseName || '',
+      city: '',
+      address: '',
+      phone: '',
+      gstin: '',
+    };
+  }, [currentUser, state.users]);
+
+  const defaultVenueName = resolvedGuestHouseInfo.name || '';
+
+  // Accessible weddings for current user:
+  // - Super Admin: all weddings
+  // - Guest House: ONLY weddings created/owned by this Guest House user
+  // - Sub-Admin & Member: ONLY assignedWeddingIds
   const accessibleWeddings = useMemo(() => {
     if (!currentUser) return [];
     if (isSuperAdmin) return state.weddings;
+    if (isGuestHouse) {
+      return state.weddings.filter(
+        (w) => w.ownerUserId === currentUser.id || w.guestHouseId === currentUser.id
+      );
+    }
     const allowedIds = Array.isArray(currentUser.assignedWeddingIds)
       ? currentUser.assignedWeddingIds
       : [];
     return state.weddings.filter((w) => allowedIds.includes(w.id));
-  }, [currentUser, isSuperAdmin, state.weddings]);
+  }, [currentUser, isSuperAdmin, isGuestHouse, state.weddings]);
 
   const activeWedding = useMemo(() => {
     if (accessibleWeddings.length === 0) return null;
@@ -967,11 +1091,28 @@ export default function App() {
     }
   }, [activeWedding, state.activeWeddingId]);
 
-  // Permissions helper for current user
+  // Permissions helper with Guest House client-privacy enforcement
   const getModulePerms = (modKey) => {
     if (!currentUser) return { enabled: false, readOnly: true, add: false, update: false, delete: false };
-    if (isSuperAdmin || isSubAdmin) {
+    if (isSuperAdmin) {
       return { enabled: true, readOnly: false, add: true, update: true, delete: true };
+    }
+    if (isGuestHouse) {
+      // Guest House users cannot view private client family modules
+      if (CLIENT_PRIVATE_MODULES.includes(modKey)) {
+        return { enabled: false, readOnly: true, add: false, update: false, delete: false };
+      }
+      return { enabled: true, readOnly: false, add: true, update: true, delete: true };
+    }
+    if (isSubAdmin) {
+      if (modKey === 'bill_templates') {
+        return { enabled: false, readOnly: true, add: false, update: false, delete: false };
+      }
+      return { enabled: true, readOnly: false, add: true, update: true, delete: true };
+    }
+    // Member role
+    if (modKey === 'bill_templates') {
+      return { enabled: false, readOnly: true, add: false, update: false, delete: false };
     }
     const p = currentUser.permissions?.[modKey];
     if (!p || !p.enabled) {
@@ -1044,9 +1185,11 @@ export default function App() {
     };
   };
 
-  // Wedding CRUD (Super Admin Only)
+  // Wedding CRUD (Super Admin & Guest House)
+  const canManageWeddings = isSuperAdmin || isGuestHouse;
+
   const handleSaveWedding = (form) => {
-    if (!isSuperAdmin) return;
+    if (!canManageWeddings) return;
     if (editingWedding) {
       updateState((prev) => ({
         ...prev,
@@ -1058,6 +1201,11 @@ export default function App() {
       const newWedding = {
         id: uid('wed'),
         ...form,
+        ownerUserId: currentUser.id,
+        guestHouseId: isGuestHouse ? currentUser.id : resolvedGuestHouseInfo.id || '',
+        guestHouseName: isGuestHouse
+          ? currentUser.guestHouseName || currentUser.name
+          : resolvedGuestHouseInfo.name || '',
         createdAt: new Date().toISOString(),
       };
       updateState((prev) => ({
@@ -1073,7 +1221,7 @@ export default function App() {
   };
 
   const handleConfirmDeleteWedding = () => {
-    if (!isSuperAdmin || !deleteWeddingTarget) return;
+    if (!canManageWeddings || !deleteWeddingTarget) return;
     const targetId = deleteWeddingTarget.id;
     const title = deleteWeddingTarget.title;
     updateState((prev) => {
@@ -1119,14 +1267,87 @@ export default function App() {
     );
   }
 
-  // Scoped records for active wedding
-  const weddingEvents = state.events.filter((e) => e.weddingId === activeWedding?.id);
-  const weddingBookings = (state.bookings || []).filter((b) => b.weddingId === activeWedding?.id);
-  const weddingGuests = state.guests.filter((g) => g.weddingId === activeWedding?.id);
-  const weddingInvites = state.invites.filter((i) => i.weddingId === activeWedding?.id);
-  const weddingMenu = state.menu.filter((m) => m.weddingId === activeWedding?.id);
-  const weddingExpenses = state.expenses.filter((x) => x.weddingId === activeWedding?.id);
-  const weddingTasks = state.tasks.filter((t) => t.weddingId === activeWedding?.id);
+  // Function/Event scoping for Sub-Admins and Members
+  const allowedEventNames = useMemo(() => {
+    if (!currentUser || isSuperAdmin || isGuestHouse) return null;
+    const ids = Array.isArray(currentUser.assignedEventIds) ? currentUser.assignedEventIds : [];
+    if (ids.length === 0) return null; // Empty means all functions within assigned wedding
+    const matched = state.events
+      .filter((e) => e.weddingId === activeWedding?.id && ids.includes(e.id))
+      .map((e) => e.name.toLowerCase());
+    return new Set(matched);
+  }, [currentUser, isSuperAdmin, isGuestHouse, state.events, activeWedding?.id]);
+
+  // Scoped records for active wedding (and assigned functions if restricted)
+  const allWeddingEvents = state.events.filter((e) => e.weddingId === activeWedding?.id);
+  const weddingEvents = allowedEventNames
+    ? allWeddingEvents.filter((e) => allowedEventNames.has((e.name || '').toLowerCase()))
+    : allWeddingEvents;
+
+  const weddingBookings = (state.bookings || []).filter((b) => {
+    if (b.weddingId !== activeWedding?.id) return false;
+    if (isGuestHouse && b.ownerUserId && b.ownerUserId !== currentUser.id) return false;
+    if (allowedEventNames && b.eventTag && b.eventTag !== 'All Events') {
+      return allowedEventNames.has(b.eventTag.toLowerCase());
+    }
+    return true;
+  });
+
+  // All bookings owned by this Guest House across all its weddings (for conflict detection & calendar)
+  const guestHouseAllBookings = useMemo(() => {
+    if (isSuperAdmin) return state.bookings || [];
+    const myWedIds = new Set(accessibleWeddings.map((w) => w.id));
+    return (state.bookings || []).filter(
+      (b) => myWedIds.has(b.weddingId) || b.ownerUserId === currentUser.id
+    );
+  }, [isSuperAdmin, state.bookings, accessibleWeddings, currentUser.id]);
+
+  const weddingGuests = isGuestHouse
+    ? []
+    : state.guests.filter((g) => g.weddingId === activeWedding?.id);
+  const weddingInvites = isGuestHouse
+    ? []
+    : state.invites.filter((i) => i.weddingId === activeWedding?.id);
+
+  const weddingMenu = state.menu.filter((m) => {
+    if (m.weddingId !== activeWedding?.id) return false;
+    if (allowedEventNames && m.event) {
+      return allowedEventNames.has(m.event.toLowerCase());
+    }
+    return true;
+  });
+
+  const weddingExpenses = isGuestHouse
+    ? []
+    : state.expenses.filter((x) => x.weddingId === activeWedding?.id);
+
+  const weddingTasks = isGuestHouse
+    ? []
+    : state.tasks.filter((t) => {
+        if (t.weddingId !== activeWedding?.id) return false;
+        if (allowedEventNames && t.eventTag && t.eventTag !== 'All Events') {
+          return allowedEventNames.has(t.eventTag.toLowerCase());
+        }
+        return true;
+      });
+
+  // Scoped spaces & bill templates
+  const scopedSpaces = (state.spaces || []).filter((sp) => {
+    if (isSuperAdmin) return true;
+    const ownerId = isGuestHouse ? currentUser.id : resolvedGuestHouseInfo.id;
+    return !ownerId || sp.ownerUserId === ownerId;
+  });
+
+  const scopedBillTemplates = useMemo(() => {
+    const all = Array.isArray(state.billTemplates) && state.billTemplates.length > 0
+      ? state.billTemplates
+      : DEFAULT_BILL_TEMPLATES;
+    if (isSuperAdmin) return all;
+    const ownerId = isGuestHouse ? currentUser.id : resolvedGuestHouseInfo.id;
+    return all.filter((t) => t.ownerUserId === 'system' || t.ownerUserId === ownerId);
+  }, [state.billTemplates, isSuperAdmin, isGuestHouse, currentUser.id, resolvedGuestHouseInfo.id]);
+
+  const canManageAdminTabs = isSuperAdmin || isGuestHouse || isSubAdmin;
 
   return (
     <div className="min-h-screen bg-[#FAF8F5] text-stone-900 flex flex-col lg:flex-row">
@@ -1150,7 +1371,9 @@ export default function App() {
                   <h1 className="font-bold text-sm tracking-tight truncate">AT Wedding Planner</h1>
                   <div className="flex items-center gap-1.5 mt-0.5">
                     <KGLogo size={15} />
-                    <span className="text-[11px] text-amber-200 truncate">Krishna Groups</span>
+                    <span className="text-[11px] text-amber-200 truncate">
+                      {resolvedGuestHouseInfo.name || 'Krishna Groups'}
+                    </span>
                   </div>
                 </div>
               )}
@@ -1174,22 +1397,33 @@ export default function App() {
                 Active Wedding Workspace
               </label>
               {accessibleWeddings.length > 0 ? (
-                <select
-                  value={activeWedding?.id || ''}
-                  onChange={(e) => updateState((prev) => ({ ...prev, activeWeddingId: e.target.value }))}
-                  className="w-full px-2.5 py-2 rounded-xl border border-stone-300 bg-white text-xs font-semibold text-stone-800 focus:ring-2 focus:ring-[#7A1C24]"
-                >
-                  {accessibleWeddings.map((w) => (
-                    <option key={w.id} value={w.id}>
-                      {w.title}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex items-center gap-2">
+                  {activeWedding?.dp && (
+                    <img
+                      src={activeWedding.dp}
+                      alt={activeWedding.title}
+                      className="w-8 h-8 rounded-lg object-cover border border-amber-300 shrink-0"
+                    />
+                  )}
+                  <select
+                    value={activeWedding?.id || ''}
+                    onChange={(e) =>
+                      updateState((prev) => ({ ...prev, activeWeddingId: e.target.value }))
+                    }
+                    className="w-full px-2.5 py-2 rounded-xl border border-stone-300 bg-white text-xs font-semibold text-stone-800 focus:ring-2 focus:ring-[#7A1C24]"
+                  >
+                    {accessibleWeddings.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               ) : (
                 <div className="text-xs text-stone-500 italic py-1">No wedding plan yet</div>
               )}
 
-              {isSuperAdmin && (
+              {canManageWeddings && (
                 <button
                   onClick={() => {
                     setEditingWedding(null);
@@ -1202,7 +1436,7 @@ export default function App() {
               )}
             </>
           ) : (
-            isSuperAdmin && (
+            canManageWeddings && (
               <button
                 onClick={() => {
                   setEditingWedding(null);
@@ -1244,14 +1478,14 @@ export default function App() {
             );
           })}
 
-          {(isSuperAdmin || isSubAdmin) && (
+          {canManageAdminTabs && (
             <div className="pt-3 mt-3 border-t border-stone-200 space-y-1">
               {!sidebarCollapsed && (
                 <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-stone-400">
                   Administration
                 </div>
               )}
-              {isSuperAdmin && (
+              {canManageWeddings && (
                 <button
                   onClick={() => setActiveTab('weddings')}
                   title="Manage Weddings"
@@ -1302,9 +1536,16 @@ export default function App() {
               <UserAvatar name={currentUser.name} avatar={currentUser.avatar} size="sm" />
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-bold text-stone-900 truncate">{currentUser.name}</p>
-                <span className="inline-block text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-100 text-[#7A1C24]">
-                  {currentUser.role.replace('_', ' ')}
-                </span>
+                <div className="flex flex-wrap items-center gap-1 mt-0.5">
+                  <span className="inline-block text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-100 text-[#7A1C24]">
+                    {currentUser.role.replace('_', ' ')}
+                  </span>
+                  {resolvedGuestHouseInfo.name && (
+                    <span className="inline-block text-[10px] font-medium px-1.5 py-0.5 rounded bg-sky-100 text-sky-900 truncate max-w-[110px]">
+                      {resolvedGuestHouseInfo.name}
+                    </span>
+                  )}
+                </div>
               </div>
               <button
                 onClick={() => setProfileModalOpen(true)}
@@ -1364,14 +1605,27 @@ export default function App() {
             >
               {sidebarCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
             </button>
-            <div className="lg:hidden">
-              <ATLogo size={34} />
-            </div>
+            {activeWedding?.dp ? (
+              <img
+                src={activeWedding.dp}
+                alt={activeWedding.title}
+                className="w-9 h-9 rounded-xl object-cover border border-amber-300 shadow-xs shrink-0"
+              />
+            ) : (
+              <div className="lg:hidden">
+                <ATLogo size={34} />
+              </div>
+            )}
             <div className="min-w-0">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="font-bold text-sm sm:text-base text-stone-900 truncate">
                   {activeWedding ? activeWedding.title : 'AT Wedding Planner'}
                 </h2>
+                {resolvedGuestHouseInfo.name && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-50 border border-sky-200 text-sky-900 text-[11px] font-semibold">
+                    <Building2 size={11} /> {resolvedGuestHouseInfo.name}
+                  </span>
+                )}
                 {activeWedding?.city && (
                   <span className="hidden sm:inline-flex items-center gap-1 text-xs text-stone-500">
                     <MapPin size={12} /> {activeWedding.city}
@@ -1382,7 +1636,7 @@ export default function App() {
                 {activeWedding
                   ? `${activeWedding.coupleNames || 'Wedding Workspace'}${
                       activeWedding.date ? ` • ${activeWedding.date}` : ''
-                    }`
+                    }${activeWedding.venue ? ` • ${activeWedding.venue}` : ''}`
                   : 'Krishna Groups • Select or create a wedding workspace'}
               </p>
             </div>
@@ -1443,7 +1697,9 @@ export default function App() {
                   <ATLogo size={36} />
                   <div>
                     <div className="font-bold text-sm">AT Wedding Planner</div>
-                    <div className="text-[10px] text-amber-200">Krishna Groups</div>
+                    <div className="text-[10px] text-amber-200">
+                      {resolvedGuestHouseInfo.name || 'Krishna Groups'}
+                    </div>
                   </div>
                 </div>
                 <button onClick={() => setMobileMenuOpen(false)} className="p-1">
@@ -1473,7 +1729,7 @@ export default function App() {
                 ) : (
                   <div className="text-xs text-stone-500">No wedding created</div>
                 )}
-                {isSuperAdmin && (
+                {canManageWeddings && (
                   <button
                     onClick={() => {
                       setMobileMenuOpen(false);
@@ -1507,7 +1763,7 @@ export default function App() {
                     </button>
                   );
                 })}
-                {isSuperAdmin && (
+                {canManageWeddings && (
                   <button
                     onClick={() => {
                       setActiveTab('weddings');
@@ -1521,7 +1777,7 @@ export default function App() {
                     <span>Manage Weddings</span>
                   </button>
                 )}
-                {(isSuperAdmin || isSubAdmin) && (
+                {canManageAdminTabs && (
                   <button
                     onClick={() => {
                       setActiveTab('users');
@@ -1560,9 +1816,9 @@ export default function App() {
 
         {/* WORKSPACE BODY */}
         <main className="flex-1 p-4 sm:p-6 max-w-7xl w-full mx-auto">
-          {activeTab === 'weddings' && isSuperAdmin ? (
+          {activeTab === 'weddings' && canManageWeddings ? (
             <WeddingsManager
-              weddings={state.weddings}
+              weddings={accessibleWeddings}
               activeWeddingId={activeWedding?.id}
               onSelect={(id) => {
                 updateState((prev) => ({ ...prev, activeWeddingId: id }));
@@ -1578,18 +1834,29 @@ export default function App() {
               }}
               onDelete={(w) => setDeleteWeddingTarget(w)}
             />
-          ) : activeTab === 'users' && (isSuperAdmin || isSubAdmin) ? (
+          ) : activeTab === 'users' && canManageAdminTabs ? (
             <UsersAdminModule
               state={state}
               setState={updateState}
               currentUser={currentUser}
               accessibleWeddings={accessibleWeddings}
+              resolvedGuestHouseInfo={resolvedGuestHouseInfo}
+              recordAudit={recordAudit}
+              showToast={showToast}
+            />
+          ) : activeTab === 'bill_templates' && (isSuperAdmin || isGuestHouse) ? (
+            <BillTemplatesModule
+              templates={scopedBillTemplates}
+              currentUser={currentUser}
+              resolvedGuestHouseInfo={resolvedGuestHouseInfo}
+              setState={updateState}
               recordAudit={recordAudit}
               showToast={showToast}
             />
           ) : !activeWedding ? (
             <NoWeddingEmptyState
-              isSuperAdmin={isSuperAdmin}
+              canCreateWedding={canManageWeddings}
+              guestHouseName={resolvedGuestHouseInfo.name}
               onCreateWedding={() => {
                 setEditingWedding(null);
                 setWeddingModalOpen(true);
@@ -1616,6 +1883,7 @@ export default function App() {
                 <EventsModule
                   events={weddingEvents}
                   weddingId={activeWedding.id}
+                  defaultVenue={defaultVenueName}
                   perms={getModulePerms('events')}
                   setState={updateState}
                   stampUser={stampUser}
@@ -1626,7 +1894,14 @@ export default function App() {
               {activeTab === 'bookings' && (
                 <BookingsModule
                   bookings={weddingBookings}
+                  allScopeBookings={guestHouseAllBookings}
+                  spaces={scopedSpaces}
+                  billTemplates={scopedBillTemplates}
+                  activeWedding={activeWedding}
                   weddingId={activeWedding.id}
+                  currentUser={currentUser}
+                  resolvedGuestHouseInfo={resolvedGuestHouseInfo}
+                  defaultVenue={defaultVenueName}
                   perms={getModulePerms('bookings')}
                   setState={updateState}
                   stampUser={stampUser}
@@ -1634,7 +1909,7 @@ export default function App() {
                   showToast={showToast}
                 />
               )}
-              {activeTab === 'guests' && (
+              {activeTab === 'guests' && !isGuestHouse && (
                 <GuestsModule
                   guests={weddingGuests}
                   activeWedding={activeWedding}
@@ -1645,7 +1920,7 @@ export default function App() {
                   showToast={showToast}
                 />
               )}
-              {activeTab === 'invites' && (
+              {activeTab === 'invites' && !isGuestHouse && (
                 <InvitesMediaModule
                   invites={weddingInvites}
                   activeWedding={activeWedding}
@@ -1667,7 +1942,7 @@ export default function App() {
                   showToast={showToast}
                 />
               )}
-              {activeTab === 'expenses' && (
+              {activeTab === 'expenses' && !isGuestHouse && (
                 <ExpensesModule
                   expenses={weddingExpenses}
                   weddingId={activeWedding.id}
@@ -1678,7 +1953,7 @@ export default function App() {
                   showToast={showToast}
                 />
               )}
-              {activeTab === 'tasks' && (
+              {activeTab === 'tasks' && !isGuestHouse && (
                 <TasksModule
                   tasks={weddingTasks}
                   users={state.users}
@@ -1715,7 +1990,7 @@ export default function App() {
         </nav>
       </div>
 
-      {/* ADD / EDIT WEDDING MODAL (SUPER ADMIN) */}
+      {/* ADD / EDIT WEDDING MODAL */}
       <WeddingFormModal
         isOpen={weddingModalOpen}
         onClose={() => {
@@ -1723,6 +1998,8 @@ export default function App() {
           setEditingWedding(null);
         }}
         initialData={editingWedding}
+        defaultVenue={defaultVenueName}
+        defaultCity={resolvedGuestHouseInfo.city}
         onSave={handleSaveWedding}
       />
 
@@ -1739,12 +2016,13 @@ export default function App() {
         isOpen={profileModalOpen}
         onClose={() => setProfileModalOpen(false)}
         user={currentUser}
+        resolvedGuestHouseInfo={resolvedGuestHouseInfo}
         onSave={(updates) => {
           updateState((prev) => ({
             ...prev,
             users: prev.users.map((u) => (u.id === currentUser.id ? { ...u, ...updates } : u)),
           }));
-          recordAudit('Profile', 'Updated', 'Updated profile photo or password');
+          recordAudit('Profile', 'Updated', 'Updated profile settings');
           showToast('Profile updated successfully');
           setProfileModalOpen(false);
         }}
@@ -1758,7 +2036,7 @@ export default function App() {
 // ==========================================
 // NO WEDDING EMPTY STATE
 // ==========================================
-function NoWeddingEmptyState({ isSuperAdmin, onCreateWedding }) {
+function NoWeddingEmptyState({ canCreateWedding, guestHouseName, onCreateWedding }) {
   return (
     <div className="bg-white rounded-3xl border border-stone-200 shadow-sm p-8 sm:p-12 text-center max-w-xl mx-auto my-8 space-y-5">
       <div className="flex justify-center items-center gap-3">
@@ -1768,15 +2046,15 @@ function NoWeddingEmptyState({ isSuperAdmin, onCreateWedding }) {
       <div className="space-y-1.5">
         <h2 className="text-xl font-bold text-stone-900">Welcome to AT Wedding Planner</h2>
         <p className="text-xs font-semibold text-[#7A1C24] uppercase tracking-wider">
-          Krishna Groups
+          {guestHouseName || 'Krishna Groups'}
         </p>
         <p className="text-sm text-stone-600 pt-2">
-          {isSuperAdmin
-            ? 'No wedding plan has been created yet. Create your first wedding workspace to start managing events, guests, cards, menu, expenses, and team tasks.'
-            : 'No wedding workspace has been assigned to your account yet. Please contact the Super Admin.'}
+          {canCreateWedding
+            ? 'No wedding plan has been created yet. Create your first wedding workspace to start managing bookings, events, menus, and client access.'
+            : 'No wedding workspace has been assigned to your account yet. Please contact your administrator.'}
         </p>
       </div>
-      {isSuperAdmin && (
+      {canCreateWedding && (
         <button
           onClick={onCreateWedding}
           className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-[#7A1C24] hover:bg-[#5E141B] text-white text-sm font-semibold shadow-md transition"
@@ -1789,14 +2067,22 @@ function NoWeddingEmptyState({ isSuperAdmin, onCreateWedding }) {
 }
 
 // ==========================================
-// WEDDING WORKSPACE MODAL & MANAGER (SUPER ADMIN)
+// WEDDING WORKSPACE MODAL & MANAGER (WITH DP & DEFAULT VENUE)
 // ==========================================
-function WeddingFormModal({ isOpen, onClose, initialData, onSave }) {
+function WeddingFormModal({
+  isOpen,
+  onClose,
+  initialData,
+  defaultVenue = '',
+  defaultCity = '',
+  onSave,
+}) {
   const [title, setTitle] = useState('');
   const [coupleNames, setCoupleNames] = useState('');
   const [date, setDate] = useState('');
   const [city, setCity] = useState('');
   const [venue, setVenue] = useState('');
+  const [dp, setDp] = useState('');
 
   useEffect(() => {
     if (initialData) {
@@ -1804,15 +2090,24 @@ function WeddingFormModal({ isOpen, onClose, initialData, onSave }) {
       setCoupleNames(initialData.coupleNames || '');
       setDate(initialData.date || '');
       setCity(initialData.city || '');
-      setVenue(initialData.venue || '');
+      setVenue(initialData.venue || defaultVenue || '');
+      setDp(initialData.dp || '');
     } else {
       setTitle('');
       setCoupleNames('');
       setDate('');
-      setCity('');
-      setVenue('');
+      setCity(defaultCity || '');
+      setVenue(defaultVenue || '');
+      setDp('');
     }
-  }, [initialData, isOpen]);
+  }, [initialData, isOpen, defaultVenue, defaultCity]);
+
+  const handleDpUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const compressed = await compressImageFile(file, 450, 0.8);
+    setDp(compressed);
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -1823,6 +2118,7 @@ function WeddingFormModal({ isOpen, onClose, initialData, onSave }) {
       date,
       city: city.trim(),
       venue: venue.trim(),
+      dp,
     });
   };
 
@@ -1831,9 +2127,42 @@ function WeddingFormModal({ isOpen, onClose, initialData, onSave }) {
       isOpen={isOpen}
       onClose={onClose}
       title={initialData ? 'Edit Wedding Plan' : 'Create New Wedding Plan'}
-      subtitle="Super Admin Workspace Management"
+      subtitle="Configure wedding display picture, dates, and venue"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Wedding DP Uploader */}
+        <div className="flex items-center gap-4 p-3 rounded-xl bg-amber-50/50 border border-amber-200/80">
+          {dp ? (
+            <img
+              src={dp}
+              alt="Wedding DP"
+              className="w-16 h-16 rounded-2xl object-cover border border-amber-300 shadow-xs shrink-0"
+            />
+          ) : (
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#7A1C24] to-[#C59B27] text-white flex items-center justify-center shrink-0">
+              <Heart size={24} />
+            </div>
+          )}
+          <div className="space-y-1">
+            <div className="text-xs font-bold text-stone-800">Wedding Display Picture (DP)</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-stone-300 text-xs font-semibold text-stone-800 cursor-pointer hover:bg-stone-100">
+                <Camera size={14} /> {dp ? 'Change DP' : 'Upload Wedding DP'}
+                <input type="file" accept="image/*" onChange={handleDpUpload} className="hidden" />
+              </label>
+              {dp && (
+                <button
+                  type="button"
+                  onClick={() => setDp('')}
+                  className="text-[11px] text-red-600 hover:underline"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
         <div>
           <label className="block text-xs font-semibold text-stone-700 mb-1">
             Wedding Title <span className="text-red-600">*</span>
@@ -1917,7 +2246,7 @@ function WeddingsManager({ weddings, activeWeddingId, onSelect, onAdd, onEdit, o
         <div>
           <h2 className="text-xl font-bold text-stone-900">Manage Wedding Plans</h2>
           <p className="text-xs text-stone-500">
-            Super Admin control to create, edit, switch, or delete wedding workspaces.
+            Create, edit, switch, or delete your accessible wedding workspaces.
           </p>
         </div>
         <button
@@ -1950,24 +2279,41 @@ function WeddingsManager({ weddings, activeWeddingId, onSelect, onAdd, onEdit, o
                 }`}
               >
                 <div>
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="font-bold text-base text-stone-900">{w.title}</h3>
-                    {isActive && (
-                      <span className="px-2 py-0.5 rounded-full bg-amber-100 text-[#7A1C24] text-[10px] font-bold">
-                        Active
-                      </span>
+                  <div className="flex items-start gap-3">
+                    {w.dp ? (
+                      <img
+                        src={w.dp}
+                        alt={w.title}
+                        className="w-12 h-12 rounded-xl object-cover border border-amber-300 shrink-0"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-xl bg-amber-100 text-[#7A1C24] flex items-center justify-center shrink-0">
+                        <Heart size={20} />
+                      </div>
                     )}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="font-bold text-base text-stone-900 truncate">{w.title}</h3>
+                        {isActive && (
+                          <span className="px-2 py-0.5 rounded-full bg-amber-100 text-[#7A1C24] text-[10px] font-bold shrink-0">
+                            Active
+                          </span>
+                        )}
+                      </div>
+                      {w.coupleNames && (
+                        <p className="text-xs text-stone-600 mt-0.5 font-medium truncate">
+                          {w.coupleNames}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  {w.coupleNames && (
-                    <p className="text-xs text-stone-600 mt-1 font-medium">{w.coupleNames}</p>
-                  )}
                   <div className="mt-3 space-y-1 text-xs text-stone-500">
                     {w.date && (
                       <div className="flex items-center gap-1.5">
                         <Calendar size={13} /> {w.date}
                       </div>
                     )}
-                    {w.city && (
+                    {(w.city || w.venue) && (
                       <div className="flex items-center gap-1.5">
                         <MapPin size={13} /> {w.city} {w.venue ? `• ${w.venue}` : ''}
                       </div>
@@ -2011,16 +2357,26 @@ function WeddingsManager({ weddings, activeWeddingId, onSelect, onAdd, onEdit, o
 // ==========================================
 // PROFILE & PASSWORD MODAL
 // ==========================================
-function ProfileSettingsModal({ isOpen, onClose, user, onSave }) {
+function ProfileSettingsModal({ isOpen, onClose, user, resolvedGuestHouseInfo, onSave }) {
   const [name, setName] = useState(user?.name || '');
   const [avatar, setAvatar] = useState(user?.avatar || '');
   const [newPassword, setNewPassword] = useState('');
+  const [guestHouseName, setGuestHouseName] = useState(user?.guestHouseName || '');
+  const [city, setCity] = useState(user?.city || '');
+  const [address, setAddress] = useState(user?.address || '');
+  const [phone, setPhone] = useState(user?.phone || '');
+  const [gstin, setGstin] = useState(user?.gstin || '');
 
   useEffect(() => {
     if (user) {
       setName(user.name || '');
       setAvatar(user.avatar || '');
       setNewPassword('');
+      setGuestHouseName(user.guestHouseName || '');
+      setCity(user.city || '');
+      setAddress(user.address || '');
+      setPhone(user.phone || '');
+      setGstin(user.gstin || '');
     }
   }, [user, isOpen]);
 
@@ -2037,11 +2393,18 @@ function ProfileSettingsModal({ isOpen, onClose, user, onSave }) {
     if (newPassword.trim()) {
       updates.password = newPassword.trim();
     }
+    if (user?.role === 'guest_house') {
+      updates.guestHouseName = guestHouseName.trim();
+      updates.city = city.trim();
+      updates.address = address.trim();
+      updates.phone = phone.trim();
+      updates.gstin = gstin.trim();
+    }
     onSave(updates);
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="My Profile & Password" maxWidth="max-w-md">
+    <Modal isOpen={isOpen} onClose={onClose} title="My Profile & Settings" maxWidth="max-w-md">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="flex items-center gap-4">
           <UserAvatar name={name} avatar={avatar} size="lg" />
@@ -2062,6 +2425,15 @@ function ProfileSettingsModal({ isOpen, onClose, user, onSave }) {
           </div>
         </div>
 
+        {resolvedGuestHouseInfo?.name && user?.role !== 'guest_house' && (
+          <div className="p-2.5 rounded-xl bg-sky-50 border border-sky-200 text-xs text-sky-900 flex items-center gap-2">
+            <Building2 size={15} className="shrink-0" />
+            <span>
+              Affiliated Guest House: <strong>{resolvedGuestHouseInfo.name}</strong>
+            </span>
+          </div>
+        )}
+
         <div>
           <label className="block text-xs font-semibold text-stone-700 mb-1">Display Name</label>
           <input
@@ -2072,6 +2444,68 @@ function ProfileSettingsModal({ isOpen, onClose, user, onSave }) {
             className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
           />
         </div>
+
+        {user?.role === 'guest_house' && (
+          <div className="p-3 rounded-xl bg-sky-50/60 border border-sky-200 space-y-3">
+            <div className="text-xs font-bold text-sky-950">Guest House / Venue Details</div>
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">
+                Guest House / Banquet Name
+              </label>
+              <input
+                type="text"
+                value={guestHouseName}
+                onChange={(e) => setGuestHouseName(e.target.value)}
+                placeholder="Enter guest house name"
+                className="w-full px-3 py-2 border border-stone-300 bg-white rounded-lg text-sm"
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div>
+                <label className="block text-xs font-semibold text-stone-700 mb-1">City</label>
+                <input
+                  type="text"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  placeholder="Enter city"
+                  className="w-full px-3 py-2 border border-stone-300 bg-white rounded-lg text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-stone-700 mb-1">
+                  Contact Phone
+                </label>
+                <input
+                  type="text"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="Enter phone number"
+                  className="w-full px-3 py-2 border border-stone-300 bg-white rounded-lg text-sm"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">Address</label>
+              <input
+                type="text"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder="Enter full address"
+                className="w-full px-3 py-2 border border-stone-300 bg-white rounded-lg text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">GSTIN</label>
+              <input
+                type="text"
+                value={gstin}
+                onChange={(e) => setGstin(e.target.value)}
+                placeholder="Enter GSTIN"
+                className="w-full px-3 py-2 border border-stone-300 bg-white rounded-lg text-sm"
+              />
+            </div>
+          </div>
+        )}
 
         <div>
           <label className="block text-xs font-semibold text-stone-700 mb-1">
@@ -2406,7 +2840,7 @@ function DashboardModule({
 // ==========================================
 // MODULE 1: EVENTS & CEREMONY PLANNER
 // ==========================================
-function EventsModule({ events, weddingId, perms, setState, stampUser, recordAudit, showToast }) {
+function EventsModule({ events, weddingId, defaultVenue = '', perms, setState, stampUser, recordAudit, showToast }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [sort, setSort] = useState({ key: 'date', dir: 'asc' });
@@ -2433,7 +2867,7 @@ function EventsModule({ events, weddingId, perms, setState, stampUser, recordAud
       name: 'Haldi',
       date: '',
       time: '',
-      venue: '',
+      venue: defaultVenue || '',
       dressCode: '',
       notes: '',
       status: 'Upcoming',
@@ -2905,6 +3339,7 @@ function GuestsModule({
   const [search, setSearch] = useState('');
   const [sideFilter, setSideFilter] = useState('ALL');
   const [groupFilter, setGroupFilter] = useState('ALL');
+  const [subGroupFilter, setSubGroupFilter] = useState('ALL');
   const [cityFilter, setCityFilter] = useState('ALL');
   const [cardFilter, setCardFilter] = useState('ALL');
   const [rsvpFilter, setRsvpFilter] = useState('ALL');
@@ -2930,6 +3365,7 @@ function GuestsModule({
     phone: '',
     side: '',
     group: '',
+    subGroup: '',
     city: '',
     adults: '',
     kids: '',
@@ -2947,6 +3383,7 @@ function GuestsModule({
     phone: '',
     side: "Groom's Side",
     group: 'Relatives',
+    subGroup: '',
     city: '',
     adults: 2,
     kids: 0,
@@ -2966,6 +3403,7 @@ function GuestsModule({
       phone: '',
       side: "Groom's Side",
       group: 'Relatives',
+      subGroup: '',
       city: '',
       adults: 2,
       kids: 0,
@@ -2987,6 +3425,7 @@ function GuestsModule({
       phone: g.phone || '',
       side: g.side || "Groom's Side",
       group: g.group || 'Relatives',
+      subGroup: g.subGroup || '',
       city: g.city || '',
       adults: g.adults ?? 1,
       kids: g.kids ?? 0,
@@ -3006,6 +3445,7 @@ function GuestsModule({
     if (!form.fullName.trim()) return;
     const normalizedPayload = {
       ...form,
+      subGroup: (form.subGroup || '').trim(),
       adults: Number(form.adults) || 0,
       kids: Number(form.kids) || 0,
       cardRequired: Boolean(form.cardRequired),
@@ -3107,6 +3547,7 @@ function GuestsModule({
         phone: findCol(['phone', 'mobile', 'whatsapp', 'contact']),
         side: findCol(['side']),
         group: findCol(['group', 'category', 'relation']),
+        subGroup: findCol(['sub-group', 'subgroup', 'sub group']),
         city: findCol(['city', 'location', 'place']),
         adults: findCol(['adult', 'headcount', 'members', 'count']),
         kids: findCol(['kid', 'child']),
@@ -3142,7 +3583,6 @@ function GuestsModule({
       const normPhone = normalizePhone(incomingPhone);
       const incomingCity = mapping.city ? (row[mapping.city] || '').trim() : '';
 
-      // Priority match: 1. Guest_ID -> 2. Normalized 10-digit Phone -> 3. Exact Full Name + City
       const matched = guests.find((g) => {
         if (incomingId && g.id === incomingId) return true;
         if (normPhone && normPhone.length >= 10 && normalizePhone(g.phone) === normPhone) return true;
@@ -3165,6 +3605,7 @@ function GuestsModule({
         phone: incomingPhone || matched?.phone || '',
         side: (mapping.side && row[mapping.side]?.trim()) || matched?.side || "Groom's Side",
         group: (mapping.group && row[mapping.group]?.trim()) || matched?.group || 'Relatives',
+        subGroup: (mapping.subGroup && row[mapping.subGroup]?.trim()) || matched?.subGroup || '',
         city: incomingCity || matched?.city || '',
         adults:
           mapping.adults && row[mapping.adults] !== ''
@@ -3209,6 +3650,7 @@ function GuestsModule({
           (matched.phone || '') !== nextData.phone ||
           matched.side !== nextData.side ||
           matched.group !== nextData.group ||
+          (matched.subGroup || '') !== nextData.subGroup ||
           (matched.city || '') !== nextData.city ||
           Number(matched.adults) !== Number(nextData.adults) ||
           Number(matched.kids) !== Number(nextData.kids) ||
@@ -3269,6 +3711,7 @@ function GuestsModule({
       'Phone',
       'Side',
       'Group',
+      'Sub-Group',
       'City',
       'Adults',
       'Kids',
@@ -3287,6 +3730,7 @@ function GuestsModule({
         Phone: '9876543210',
         Side: "Groom's Side",
         Group: 'Relatives',
+        'Sub-Group': 'Maternal Side',
         City: 'Prayagraj',
         Adults: '2',
         Kids: '1',
@@ -3309,6 +3753,7 @@ function GuestsModule({
       'Phone',
       'Side',
       'Group',
+      'Sub-Group',
       'City',
       'Adults',
       'Kids',
@@ -3327,6 +3772,7 @@ function GuestsModule({
       Phone: g.phone || '',
       Side: g.side,
       Group: g.group,
+      'Sub-Group': g.subGroup || '',
       City: g.city || '',
       Adults: g.adults,
       Kids: g.kids,
@@ -3343,23 +3789,44 @@ function GuestsModule({
   };
 
   const copyWhatsAppInvite = (g) => {
-    const msg = `Namaste ${g.fullName} Ji,
-
-We warmly invite you and your family to the wedding celebrations of ${
+    const msg = `Namaste ${g.fullName} Ji,\n\nWe warmly invite you and your family to the wedding celebrations of ${
       activeWedding.coupleNames || activeWedding.title
     }${activeWedding.date ? ` on ${activeWedding.date}` : ''}${
       activeWedding.city ? ` in ${activeWedding.city}` : ''
-    }.
-
-Your presence will make our celebration truly special!`;
+    }.\n\nYour presence will make our celebration truly special!`;
     navigator.clipboard.writeText(msg);
     setCopiedId(g.id);
     showToast(`Copied invite for ${g.fullName}`);
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  // Dynamic Filter Options derived from standard + all custom user-added entries
+  const dynamicSides = useMemo(() => {
+    return Array.from(new Set([...GUEST_SIDES, ...guests.map((g) => g.side).filter(Boolean)]));
+  }, [guests]);
+
+  const dynamicGroups = useMemo(() => {
+    return Array.from(new Set([...GUEST_GROUPS, ...guests.map((g) => g.group).filter(Boolean)]));
+  }, [guests]);
+
+  const dynamicSubGroups = useMemo(() => {
+    return Array.from(new Set(guests.map((g) => (g.subGroup || '').trim()).filter(Boolean))).sort();
+  }, [guests]);
+
   const uniqueCities = useMemo(() => {
     return Array.from(new Set(guests.map((g) => g.city).filter(Boolean))).sort();
+  }, [guests]);
+
+  const dynamicCardStatuses = useMemo(() => {
+    return Array.from(
+      new Set([...CARD_STATUSES, ...guests.map((g) => g.cardStatus).filter(Boolean)])
+    );
+  }, [guests]);
+
+  const dynamicRsvpStatuses = useMemo(() => {
+    return Array.from(
+      new Set([...RSVP_STATUSES, ...guests.map((g) => g.rsvpStatus).filter(Boolean)])
+    );
   }, [guests]);
 
   const handleSort = (key) => {
@@ -3373,6 +3840,7 @@ Your presence will make our celebration truly special!`;
       .filter((g) => {
         if (sideFilter !== 'ALL' && g.side !== sideFilter) return false;
         if (groupFilter !== 'ALL' && g.group !== groupFilter) return false;
+        if (subGroupFilter !== 'ALL' && (g.subGroup || '').trim() !== subGroupFilter) return false;
         if (cityFilter !== 'ALL' && (g.city || '') !== cityFilter) return false;
         if (cardFilter !== 'ALL' && g.cardStatus !== cardFilter) return false;
         if (rsvpFilter !== 'ALL' && g.rsvpStatus !== rsvpFilter) return false;
@@ -3389,7 +3857,8 @@ Your presence will make our celebration truly special!`;
             g.fullName.toLowerCase().includes(q) ||
             (g.phone || '').toLowerCase().includes(q) ||
             (g.city || '').toLowerCase().includes(q) ||
-            (g.group || '').toLowerCase().includes(q)
+            (g.group || '').toLowerCase().includes(q) ||
+            (g.subGroup || '').toLowerCase().includes(q)
           );
         }
         return true;
@@ -3422,6 +3891,7 @@ Your presence will make our celebration truly special!`;
     guests,
     sideFilter,
     groupFilter,
+    subGroupFilter,
     cityFilter,
     cardFilter,
     rsvpFilter,
@@ -3451,6 +3921,7 @@ Your presence will make our celebration truly special!`;
     search ||
     sideFilter !== 'ALL' ||
     groupFilter !== 'ALL' ||
+    subGroupFilter !== 'ALL' ||
     cityFilter !== 'ALL' ||
     cardFilter !== 'ALL' ||
     rsvpFilter !== 'ALL' ||
@@ -3533,7 +4004,7 @@ Your presence will make our celebration truly special!`;
         </div>
       </div>
 
-      {/* Multi-Filter Bar */}
+      {/* Multi-Filter Bar (All Groups + Sub-Groups Included Dynamically) */}
       <div className="bg-white rounded-2xl border border-stone-200 p-3.5 space-y-2.5">
         <div className="flex flex-wrap items-center gap-2.5">
           <div className="relative flex-1 min-w-[200px]">
@@ -3542,7 +4013,7 @@ Your presence will make our celebration truly special!`;
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search guests by name, phone, city, or group..."
+              placeholder="Search guests by name, phone, city, group, or sub-group..."
               className="w-full pl-9 pr-3 py-2 border border-stone-300 rounded-xl text-xs"
             />
           </div>
@@ -3552,7 +4023,7 @@ Your presence will make our celebration truly special!`;
             className="px-2.5 py-2 border border-stone-300 rounded-xl text-xs bg-white"
           >
             <option value="ALL">All Sides</option>
-            {GUEST_SIDES.map((s) => (
+            {dynamicSides.map((s) => (
               <option key={s} value={s}>
                 {s}
               </option>
@@ -3563,10 +4034,24 @@ Your presence will make our celebration truly special!`;
             onChange={(e) => setGroupFilter(e.target.value)}
             className="px-2.5 py-2 border border-stone-300 rounded-xl text-xs bg-white"
           >
-            <option value="ALL">All Groups</option>
-            {GUEST_GROUPS.map((g) => (
+            <option value="ALL">All Groups ({dynamicGroups.length})</option>
+            {dynamicGroups.map((g) => (
               <option key={g} value={g}>
                 {g}
+              </option>
+            ))}
+          </select>
+          <select
+            value={subGroupFilter}
+            onChange={(e) => setSubGroupFilter(e.target.value)}
+            className="px-2.5 py-2 border border-stone-300 rounded-xl text-xs bg-white"
+          >
+            <option value="ALL">
+              All Sub-Groups {dynamicSubGroups.length > 0 ? `(${dynamicSubGroups.length})` : ''}
+            </option>
+            {dynamicSubGroups.map((sg) => (
+              <option key={sg} value={sg}>
+                {sg}
               </option>
             ))}
           </select>
@@ -3608,7 +4093,7 @@ Your presence will make our celebration truly special!`;
             className="px-2.5 py-2 border border-stone-300 rounded-xl text-xs bg-white"
           >
             <option value="ALL">All Card Status</option>
-            {CARD_STATUSES.map((c) => (
+            {dynamicCardStatuses.map((c) => (
               <option key={c} value={c}>
                 {c}
               </option>
@@ -3620,7 +4105,7 @@ Your presence will make our celebration truly special!`;
             className="px-2.5 py-2 border border-stone-300 rounded-xl text-xs bg-white"
           >
             <option value="ALL">All RSVP</option>
-            {RSVP_STATUSES.map((r) => (
+            {dynamicRsvpStatuses.map((r) => (
               <option key={r} value={r}>
                 {r}
               </option>
@@ -3641,6 +4126,7 @@ Your presence will make our celebration truly special!`;
                 setSearch('');
                 setSideFilter('ALL');
                 setGroupFilter('ALL');
+                setSubGroupFilter('ALL');
                 setCityFilter('ALL');
                 setCardFilter('ALL');
                 setRsvpFilter('ALL');
@@ -3675,7 +4161,7 @@ Your presence will make our celebration truly special!`;
                   </th>
                 )}
                 <SortableHeader label="Guest / Family" sortKey="fullName" currentSort={sort} onSort={handleSort} />
-                <SortableHeader label="Side & Group" sortKey="side" currentSort={sort} onSort={handleSort} />
+                <SortableHeader label="Side, Group & Sub-Group" sortKey="side" currentSort={sort} onSort={handleSort} />
                 <SortableHeader label="City" sortKey="city" currentSort={sort} onSort={handleSort} />
                 <SortableHeader label="Headcount" sortKey="headcount" currentSort={sort} onSort={handleSort} align="center" />
                 <SortableHeader label="Card Req." sortKey="cardRequired" currentSort={sort} onSort={handleSort} align="center" />
@@ -3726,7 +4212,10 @@ Your presence will make our celebration truly special!`;
                       </td>
                       <td className="px-3 py-3">
                         <div className="font-medium text-stone-800">{g.side}</div>
-                        <div className="text-[11px] text-stone-500">{g.group}</div>
+                        <div className="text-[11px] text-stone-500">
+                          {g.group}
+                          {g.subGroup ? ` • ${g.subGroup}` : ''}
+                        </div>
                       </td>
                       <td className="px-3 py-3 text-stone-700">
                         <div>{g.city || '—'}</div>
@@ -3743,7 +4232,7 @@ Your presence will make our celebration truly special!`;
                         </div>
                       </td>
 
-                      {/* Column 1 after Headcount: Card Required Checkbox */}
+                      {/* Card Required Checkbox */}
                       <td className="px-3 py-3 text-center">
                         <input
                           type="checkbox"
@@ -3757,7 +4246,7 @@ Your presence will make our celebration truly special!`;
                         />
                       </td>
 
-                      {/* Column 2 after Headcount: Money Applicable Checkbox */}
+                      {/* Money Applicable Checkbox */}
                       <td className="px-3 py-3 text-center">
                         <input
                           type="checkbox"
@@ -3766,12 +4255,12 @@ Your presence will make our celebration truly special!`;
                           onChange={(e) =>
                             quickUpdateField(g.id, 'moneyRequired', e.target.checked)
                           }
-                          title="Money / Shagun Applicable"
+                          title="Money Applicable"
                           className="w-4 h-4 rounded border-stone-300 text-[#7A1C24] cursor-pointer"
                         />
                       </td>
 
-                      {/* Column 3 after Headcount: Editable Amount (₹) when Money Applicable is checked */}
+                      {/* Editable Amount (₹) when Money Applicable is checked */}
                       <td className="px-3 py-3 text-right">
                         {isMoneyReq ? (
                           <input
@@ -3794,7 +4283,7 @@ Your presence will make our celebration truly special!`;
                         )}
                       </td>
 
-                      {/* Column 4 after Headcount: Money Given Checkbox */}
+                      {/* Money Given Checkbox */}
                       <td className="px-3 py-3 text-center">
                         {isMoneyReq ? (
                           <input
@@ -3915,21 +4404,39 @@ Your presence will make our celebration truly special!`;
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <DropdownWithOther
               label="Side"
               value={form.side}
               onChange={(val) => setForm({ ...form, side: val })}
-              options={GUEST_SIDES}
+              options={dynamicSides}
               placeholder="Enter side"
             />
             <DropdownWithOther
               label="Group / Relation"
               value={form.group}
               onChange={(val) => setForm({ ...form, group: val })}
-              options={GUEST_GROUPS}
+              options={dynamicGroups}
               placeholder="Enter group"
             />
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">
+                Sub-Group
+              </label>
+              <input
+                type="text"
+                list="guest-subgroup-suggestions"
+                value={form.subGroup}
+                onChange={(e) => setForm({ ...form, subGroup: e.target.value })}
+                placeholder="Enter sub-group"
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+              />
+              <datalist id="guest-subgroup-suggestions">
+                {dynamicSubGroups.map((sg) => (
+                  <option key={sg} value={sg} />
+                ))}
+              </datalist>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -4102,6 +4609,7 @@ Your presence will make our celebration truly special!`;
               { key: 'guestId', label: 'Guest_ID (For exact re-import)' },
               { key: 'side', label: 'Side' },
               { key: 'group', label: 'Group / Relation' },
+              { key: 'subGroup', label: 'Sub-Group' },
               { key: 'city', label: 'City' },
               { key: 'adults', label: 'Adults Count' },
               { key: 'kids', label: 'Kids Count' },
@@ -4281,23 +4789,52 @@ function InvitesMediaModule({
   };
 
   const handleShare = async (item) => {
-    const shareText = `${item.title} — ${activeWedding.coupleNames || activeWedding.title}${
-      item.linkUrl ? `\nView Invite: ${item.linkUrl}` : ''
-    }`;
+    const lines = [
+      `${item.title} — ${activeWedding.coupleNames || activeWedding.title}`,
+      item.eventTag ? `Ceremony: ${item.eventTag}` : '',
+      item.notes || '',
+      item.linkUrl ? `Invitation Link: ${item.linkUrl}` : '',
+    ].filter(Boolean);
+    const shareText = lines.join('\n');
+
     if (navigator.share) {
       try {
-        await navigator.share({
+        // If an image/media file is attached, convert dataUrl to File and share the actual content
+        if (item.mediaDataUrl && item.mediaDataUrl.startsWith('data:')) {
+          const res = await fetch(item.mediaDataUrl);
+          const blob = await res.blob();
+          const ext = (item.mediaMime || blob.type || 'image/jpeg').split('/')[1] || 'jpg';
+          const safeTitle = (item.title || 'Invitation').replace(/[^a-zA-Z0-9_-]/g, '_');
+          const file = new File([blob], `${safeTitle}.${ext}`, {
+            type: item.mediaMime || blob.type || 'image/jpeg',
+          });
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              title: item.title,
+              text: shareText,
+              files: [file],
+            });
+            return;
+          }
+        }
+
+        // Share link or rich text content without injecting the app website URL
+        const sharePayload = {
           title: item.title,
           text: shareText,
-          url: item.linkUrl || window.location.href,
-        });
+        };
+        if (item.linkUrl) {
+          sharePayload.url = item.linkUrl;
+        }
+        await navigator.share(sharePayload);
         return;
-      } catch {
-        // fallback to clipboard
+      } catch (err) {
+        if (err && err.name === 'AbortError') return;
       }
     }
+
     navigator.clipboard.writeText(shareText);
-    showToast('Shareable invite message & link copied to clipboard!');
+    showToast('Invitation content copied to clipboard!');
   };
 
   const handleWhatsAppShare = (item) => {
@@ -6359,35 +6896,110 @@ function UsersAdminModule({
   setState,
   currentUser,
   accessibleWeddings,
+  resolvedGuestHouseInfo,
   recordAudit,
   showToast,
 }) {
   const isSuperAdmin = currentUser.role === 'super_admin';
+  const isGuestHouse = currentUser.role === 'guest_house';
+  const isSubAdmin = currentUser.role === 'sub_admin';
+
+  const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+
+  const defaultRoleForCreator = isSuperAdmin
+    ? 'guest_house'
+    : isGuestHouse
+    ? 'sub_admin'
+    : 'member';
 
   const [form, setForm] = useState({
     name: '',
     username: '',
     password: '',
-    role: 'member',
+    role: defaultRoleForCreator,
+    guestHouseName: '',
+    city: '',
+    address: '',
+    phone: '',
+    gstin: '',
     avatar: '',
     active: true,
     assignedWeddingIds: [],
+    assignedEventIds: [],
     permissions: defaultMemberPermissions(),
   });
 
+  // Strict hierarchical visibility:
+  // - Super Admin sees all users
+  // - Guest House sees users created under its Guest House (Sub-Admins & Members)
+  // - Sub-Admin sees Members assigned to their weddings (never Guest House accounts)
   const manageableUsers = useMemo(() => {
-    if (isSuperAdmin) return state.users;
-    // Sub-Admin can view & manage Members assigned to their weddings
-    const myWeddingIds = currentUser.assignedWeddingIds || [];
-    return state.users.filter(
+    const allUsers = Array.isArray(state.users) ? state.users : [];
+    let scoped = [];
+    if (isSuperAdmin) {
+      scoped = allUsers;
+    } else if (isGuestHouse) {
+      scoped = allUsers.filter(
+        (u) =>
+          u.role !== 'super_admin' &&
+          u.role !== 'guest_house' &&
+          (u.guestHouseId === currentUser.id || u.createdByUserId === currentUser.id)
+      );
+    } else {
+      const myWeddingIds = currentUser.assignedWeddingIds || [];
+      scoped = allUsers.filter(
+        (u) =>
+          u.role === 'member' &&
+          (u.assignedWeddingIds || []).some((id) => myWeddingIds.includes(id))
+      );
+    }
+    if (!search.trim()) return scoped;
+    const q = search.toLowerCase();
+    return scoped.filter(
       (u) =>
-        u.role === 'member' &&
-        (u.assignedWeddingIds || []).some((id) => myWeddingIds.includes(id))
+        (u.name || '').toLowerCase().includes(q) ||
+        (u.username || '').toLowerCase().includes(q) ||
+        (u.guestHouseName || '').toLowerCase().includes(q)
     );
-  }, [isSuperAdmin, state.users, currentUser]);
+  }, [isSuperAdmin, isGuestHouse, state.users, currentUser, search]);
+
+  // Group users by role
+  const groupedUsers = useMemo(() => {
+    const groups = [
+      {
+        key: 'super_admin',
+        title: 'Super Admins',
+        badgeClass: 'bg-purple-100 text-purple-800 border-purple-200',
+        users: manageableUsers.filter((u) => u.role === 'super_admin'),
+      },
+      {
+        key: 'guest_house',
+        title: 'Guest Houses & Venues',
+        badgeClass: 'bg-sky-100 text-sky-900 border-sky-200',
+        users: manageableUsers.filter((u) => u.role === 'guest_house'),
+      },
+      {
+        key: 'sub_admin',
+        title: 'Sub-Admins (Wedding / Function Coordinators)',
+        badgeClass: 'bg-amber-100 text-[#7A1C24] border-amber-200',
+        users: manageableUsers.filter((u) => u.role === 'sub_admin'),
+      },
+      {
+        key: 'member',
+        title: 'Members (Custom Module Access)',
+        badgeClass: 'bg-stone-100 text-stone-700 border-stone-200',
+        users: manageableUsers.filter((u) => u.role === 'member'),
+      },
+    ];
+    return groups.filter((g) => {
+      if (isSuperAdmin) return true;
+      if (isGuestHouse) return g.key === 'sub_admin' || g.key === 'member';
+      return g.key === 'member';
+    });
+  }, [manageableUsers, isSuperAdmin, isGuestHouse]);
 
   const openAdd = () => {
     setEditingUser(null);
@@ -6395,10 +7007,16 @@ function UsersAdminModule({
       name: '',
       username: '',
       password: '',
-      role: 'member',
+      role: defaultRoleForCreator,
+      guestHouseName: isGuestHouse ? resolvedGuestHouseInfo.name : '',
+      city: '',
+      address: '',
+      phone: '',
+      gstin: '',
       avatar: '',
       active: true,
       assignedWeddingIds: accessibleWeddings[0] ? [accessibleWeddings[0].id] : [],
+      assignedEventIds: [],
       permissions: defaultMemberPermissions(),
     });
     setModalOpen(true);
@@ -6411,9 +7029,15 @@ function UsersAdminModule({
       username: u.username,
       password: u.password,
       role: u.role,
+      guestHouseName: u.guestHouseName || '',
+      city: u.city || '',
+      address: u.address || '',
+      phone: u.phone || '',
+      gstin: u.gstin || '',
       avatar: u.avatar || '',
       active: u.active !== false,
       assignedWeddingIds: Array.isArray(u.assignedWeddingIds) ? u.assignedWeddingIds : [],
+      assignedEventIds: Array.isArray(u.assignedEventIds) ? u.assignedEventIds : [],
       permissions: u.permissions || defaultMemberPermissions(),
     });
     setModalOpen(true);
@@ -6429,11 +7053,29 @@ function UsersAdminModule({
   const toggleWeddingAssignment = (wId) => {
     setForm((prev) => {
       const exists = prev.assignedWeddingIds.includes(wId);
+      const nextWeddings = exists
+        ? prev.assignedWeddingIds.filter((id) => id !== wId)
+        : [...prev.assignedWeddingIds, wId];
+      // Prune any assignedEventIds that belong to unselected weddings
+      const validEventIds = (state.events || [])
+        .filter((ev) => nextWeddings.includes(ev.weddingId))
+        .map((ev) => ev.id);
       return {
         ...prev,
-        assignedWeddingIds: exists
-          ? prev.assignedWeddingIds.filter((id) => id !== wId)
-          : [...prev.assignedWeddingIds, wId],
+        assignedWeddingIds: nextWeddings,
+        assignedEventIds: prev.assignedEventIds.filter((id) => validEventIds.includes(id)),
+      };
+    });
+  };
+
+  const toggleEventAssignment = (evId) => {
+    setForm((prev) => {
+      const exists = prev.assignedEventIds.includes(evId);
+      return {
+        ...prev,
+        assignedEventIds: exists
+          ? prev.assignedEventIds.filter((id) => id !== evId)
+          : [...prev.assignedEventIds, evId],
       };
     });
   };
@@ -6481,25 +7123,51 @@ function UsersAdminModule({
       return;
     }
 
-    const effectiveRole = isSuperAdmin ? form.role : 'member';
+    // Enforce role hierarchy rules
+    let effectiveRole = form.role;
+    if (!isSuperAdmin && effectiveRole === 'super_admin') effectiveRole = 'member';
+    if (!isSuperAdmin && effectiveRole === 'guest_house') effectiveRole = 'sub_admin';
+    if (isSubAdmin) effectiveRole = 'member';
+
     const effectivePerms =
-      effectiveRole === 'super_admin' || effectiveRole === 'sub_admin'
+      effectiveRole === 'super_admin' ||
+      effectiveRole === 'guest_house' ||
+      effectiveRole === 'sub_admin'
         ? fullPermissions()
         : form.permissions;
+
+    // Inherit Guest House affiliation when created by a Guest House user or Sub-Admin under a Guest House
+    const inheritedGuestHouseId =
+      effectiveRole === 'guest_house'
+        ? ''
+        : editingUser?.guestHouseId || resolvedGuestHouseInfo.id || '';
+    const inheritedGuestHouseName =
+      effectiveRole === 'guest_house'
+        ? (form.guestHouseName || form.name).trim()
+        : editingUser?.guestHouseName || resolvedGuestHouseInfo.name || '';
+
+    const userPayload = {
+      ...form,
+      username: form.username.trim(),
+      role: effectiveRole,
+      guestHouseId: inheritedGuestHouseId,
+      guestHouseName: inheritedGuestHouseName,
+      assignedWeddingIds:
+        effectiveRole === 'super_admin' || effectiveRole === 'guest_house'
+          ? []
+          : form.assignedWeddingIds,
+      assignedEventIds:
+        effectiveRole === 'super_admin' || effectiveRole === 'guest_house'
+          ? []
+          : form.assignedEventIds,
+      permissions: effectivePerms,
+    };
 
     if (editingUser) {
       setState((prev) => ({
         ...prev,
         users: prev.users.map((u) =>
-          u.id === editingUser.id
-            ? {
-                ...u,
-                ...form,
-                username: form.username.trim(),
-                role: effectiveRole,
-                permissions: effectivePerms,
-              }
-            : u
+          u.id === editingUser.id ? { ...u, ...userPayload } : u
         ),
       }));
       recordAudit('Users', 'Updated', `Updated user "${form.name}" (${effectiveRole})`);
@@ -6507,10 +7175,8 @@ function UsersAdminModule({
     } else {
       const created = {
         id: uid('usr'),
-        ...form,
-        username: form.username.trim(),
-        role: effectiveRole,
-        permissions: effectivePerms,
+        ...userPayload,
+        createdByUserId: currentUser.id,
       };
       setState((prev) => ({ ...prev, users: [...prev.users, created] }));
       recordAudit('Users', 'Created', `Created user "${form.name}" (${effectiveRole})`);
@@ -6521,11 +7187,21 @@ function UsersAdminModule({
 
   const handleDeleteUser = (u) => {
     if (u.id === 'user_super_admin' || u.id === currentUser.id) return;
+    if (u.role === 'guest_house' && !isSuperAdmin) return;
     setState((prev) => ({ ...prev, users: prev.users.filter((x) => x.id !== u.id) }));
     recordAudit('Users', 'Deleted', `Deleted user "${u.name}"`);
     showToast('User removed');
     setDeleteTarget(null);
   };
+
+  // Events available for function-level scoping based on selected weddings in form
+  const assignableEvents = useMemo(() => {
+    return (state.events || []).filter((ev) =>
+      form.assignedWeddingIds.includes(ev.weddingId)
+    );
+  }, [state.events, form.assignedWeddingIds]);
+
+  const roleModulesForMatrix = MODULES.filter((m) => m.key !== 'bill_templates');
 
   return (
     <div className="space-y-5">
@@ -6534,103 +7210,160 @@ function UsersAdminModule({
           <h2 className="text-xl font-bold text-stone-900">Users, Roles & Module Permissions</h2>
           <p className="text-xs text-stone-500">
             {isSuperAdmin
-              ? 'Manage Sub-Admins & Members, assign wedding workspaces, and control module permissions.'
-              : 'Manage Member accounts and module permissions for your assigned wedding plans.'}
+              ? 'Manage Super Admins, Guest Houses, Sub-Admins & Members grouped by role.'
+              : isGuestHouse
+              ? `Manage Sub-Admins & Members for ${resolvedGuestHouseInfo.name || 'your Guest House'} and assign wedding/function access.`
+              : 'Manage Member accounts and module permissions for your assigned weddings/functions.'}
           </p>
         </div>
-        <button
-          onClick={openAdd}
-          className="px-4 py-2.5 rounded-xl bg-[#7A1C24] text-white text-xs font-semibold flex items-center gap-1.5 shadow-sm hover:bg-[#5E141B]"
-        >
-          <Plus size={16} /> Add User Account
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search users or guest house..."
+              className="pl-8 pr-3 py-2 border border-stone-300 rounded-xl text-xs bg-white"
+            />
+          </div>
+          <button
+            onClick={openAdd}
+            className="px-4 py-2.5 rounded-xl bg-[#7A1C24] text-white text-xs font-semibold flex items-center gap-1.5 shadow-sm hover:bg-[#5E141B]"
+          >
+            <Plus size={16} /> Add User Account
+          </button>
+        </div>
       </div>
 
-      {/* Users Table */}
-      <div className="bg-white rounded-2xl border border-stone-200 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead className="bg-stone-50 border-b border-stone-200 text-xs font-semibold uppercase text-stone-600">
-              <tr>
-                <th className="px-4 py-3">User</th>
-                <th className="px-4 py-3">Role</th>
-                <th className="px-4 py-3">Assigned Weddings</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-stone-100 text-xs">
-              {manageableUsers.map((u) => {
-                const assignedNames =
-                  u.role === 'super_admin'
-                    ? ['All Weddings']
-                    : (u.assignedWeddingIds || [])
-                        .map((id) => state.weddings.find((w) => w.id === id)?.title)
+      {/* Role-Grouped User Sections */}
+      <div className="space-y-5">
+        {groupedUsers.map((grp) => (
+          <div
+            key={grp.key}
+            className="bg-white rounded-2xl border border-stone-200 shadow-xs overflow-hidden"
+          >
+            <div className="px-4 py-3 bg-stone-50 border-b border-stone-200 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <span
+                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${grp.badgeClass}`}
+                >
+                  {grp.title}
+                </span>
+                <span className="text-xs font-semibold text-stone-500">
+                  {grp.users.length} {grp.users.length === 1 ? 'User' : 'Users'}
+                </span>
+              </div>
+            </div>
+
+            {grp.users.length === 0 ? (
+              <div className="px-4 py-6 text-center text-xs text-stone-400">
+                No users in this role group yet.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead className="bg-stone-50/60 border-b border-stone-200 text-[11px] font-semibold uppercase text-stone-500">
+                    <tr>
+                      <th className="px-4 py-2.5">User</th>
+                      <th className="px-4 py-2.5">Guest House / Venue</th>
+                      <th className="px-4 py-2.5">Assigned Weddings & Functions</th>
+                      <th className="px-4 py-2.5">Status</th>
+                      <th className="px-4 py-2.5 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100 text-xs">
+                    {grp.users.map((u) => {
+                      const assignedWedNames =
+                        u.role === 'super_admin'
+                          ? ['All Weddings']
+                          : u.role === 'guest_house'
+                          ? ['Own Created Weddings']
+                          : (u.assignedWeddingIds || [])
+                              .map((id) => state.weddings.find((w) => w.id === id)?.title)
+                              .filter(Boolean);
+
+                      const assignedFnNames = (u.assignedEventIds || [])
+                        .map((id) => state.events.find((ev) => ev.id === id)?.name)
                         .filter(Boolean);
-                return (
-                  <tr key={u.id} className="hover:bg-stone-50/70">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <UserAvatar name={u.name} avatar={u.avatar} size="sm" />
-                        <div>
-                          <div className="font-bold text-stone-900">{u.name}</div>
-                          <div className="text-[11px] text-stone-500">@{u.username}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                          u.role === 'super_admin'
-                            ? 'bg-purple-100 text-purple-800'
-                            : u.role === 'sub_admin'
-                            ? 'bg-amber-100 text-[#7A1C24]'
-                            : 'bg-stone-100 text-stone-700'
-                        }`}
-                      >
-                        {u.role.replace('_', ' ')}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-stone-600">
-                      {assignedNames.length > 0 ? assignedNames.join(', ') : 'None assigned'}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          u.active !== false
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-red-100 text-red-700'
-                        }`}
-                      >
-                        {u.active !== false ? 'Active' : 'Disabled'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="inline-flex items-center gap-1">
-                        <button
-                          onClick={() => openEdit(u)}
-                          className="p-1.5 rounded-lg text-stone-600 hover:bg-stone-100"
-                          title="Edit User & Permissions"
-                        >
-                          <Edit2 size={14} />
-                        </button>
-                        {isSuperAdmin && u.id !== 'user_super_admin' && u.id !== currentUser.id && (
-                          <button
-                            onClick={() => setDeleteTarget(u)}
-                            className="p-1.5 rounded-lg text-red-600 hover:bg-red-50"
-                            title="Delete User"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+
+                      const canDeleteThisUser =
+                        u.id !== 'user_super_admin' &&
+                        u.id !== currentUser.id &&
+                        (isSuperAdmin || u.role !== 'guest_house');
+
+                      return (
+                        <tr key={u.id} className="hover:bg-stone-50/70">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2.5">
+                              <UserAvatar name={u.name} avatar={u.avatar} size="sm" />
+                              <div>
+                                <div className="font-bold text-stone-900">{u.name}</div>
+                                <div className="text-[11px] text-stone-500">@{u.username}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            {u.guestHouseName ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-sky-50 border border-sky-200 text-sky-900 text-[11px] font-semibold">
+                                <Building2 size={11} /> {u.guestHouseName}
+                              </span>
+                            ) : (
+                              <span className="text-stone-400">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-stone-600">
+                            <div>
+                              {assignedWedNames.length > 0
+                                ? assignedWedNames.join(', ')
+                                : 'None assigned'}
+                            </div>
+                            {assignedFnNames.length > 0 && (
+                              <div className="text-[10px] text-amber-800 font-semibold mt-0.5">
+                                Functions: {assignedFnNames.join(', ')}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                u.active !== false
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-red-100 text-red-700'
+                              }`}
+                            >
+                              {u.active !== false ? 'Active' : 'Disabled'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="inline-flex items-center gap-1">
+                              <button
+                                onClick={() => openEdit(u)}
+                                className="p-1.5 rounded-lg text-stone-600 hover:bg-stone-100"
+                                title="Edit User & Permissions"
+                              >
+                                <Edit2 size={14} />
+                              </button>
+                              {canDeleteThisUser && (
+                                <button
+                                  onClick={() => setDeleteTarget(u)}
+                                  className="p-1.5 rounded-lg text-red-600 hover:bg-red-50"
+                                  title="Delete User"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ))}
       </div>
 
       {/* Add / Edit User Modal */}
@@ -6638,28 +7371,41 @@ function UsersAdminModule({
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         title={editingUser ? `Edit User: ${editingUser.name}` : 'Create New User Account'}
-        subtitle="Set display picture, role, wedding access & module checkboxes"
+        subtitle="Configure role, Guest House affiliation, wedding/function scope & permissions"
         maxWidth="max-w-3xl"
       >
         <form onSubmit={handleSave} className="space-y-4">
-          {/* Avatar + Basic Info */}
-          <div className="flex flex-wrap items-center gap-4 p-3.5 rounded-xl bg-stone-50 border border-stone-200">
-            <UserAvatar name={form.name || 'U'} avatar={form.avatar} size="lg" />
-            <div className="space-y-1">
-              <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-stone-300 text-xs font-semibold text-stone-800 cursor-pointer hover:bg-stone-100">
-                <Camera size={14} /> Upload Display Picture
-                <input type="file" accept="image/*" onChange={handleAvatarFile} className="hidden" />
-              </label>
-              {form.avatar && (
-                <button
-                  type="button"
-                  onClick={() => setForm({ ...form, avatar: '' })}
-                  className="block text-[11px] text-red-600 hover:underline"
-                >
-                  Remove Photo
-                </button>
-              )}
+          {/* Avatar + Guest House Affiliation Banner */}
+          <div className="flex flex-wrap items-center justify-between gap-4 p-3.5 rounded-xl bg-stone-50 border border-stone-200">
+            <div className="flex items-center gap-4">
+              <UserAvatar name={form.name || 'U'} avatar={form.avatar} size="lg" />
+              <div className="space-y-1">
+                <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-stone-300 text-xs font-semibold text-stone-800 cursor-pointer hover:bg-stone-100">
+                  <Camera size={14} /> Upload Display Picture
+                  <input type="file" accept="image/*" onChange={handleAvatarFile} className="hidden" />
+                </label>
+                {form.avatar && (
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, avatar: '' })}
+                    className="block text-[11px] text-red-600 hover:underline"
+                  >
+                    Remove Photo
+                  </button>
+                )}
+              </div>
             </div>
+
+            {resolvedGuestHouseInfo?.name && form.role !== 'guest_house' && (
+              <div className="px-3 py-2 rounded-xl bg-sky-50 border border-sky-200 text-xs text-sky-900">
+                <div className="text-[10px] font-bold uppercase text-sky-700">
+                  Affiliated Guest House
+                </div>
+                <div className="font-bold flex items-center gap-1.5 mt-0.5">
+                  <Building2 size={13} /> {resolvedGuestHouseInfo.name}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -6718,9 +7464,14 @@ function UsersAdminModule({
                   className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm bg-white"
                 >
                   <option value="member">Member (Custom Module Permissions)</option>
-                  {isSuperAdmin && (
+                  {(isSuperAdmin || isGuestHouse) && (
                     <option value="sub_admin">
-                      Sub-Admin (Full Access to Assigned Weddings, Cannot Add Weddings)
+                      Sub-Admin (Full Access to Assigned Weddings & Functions)
+                    </option>
+                  )}
+                  {isSuperAdmin && (
+                    <option value="guest_house">
+                      Guest House (Manage Own Venue Bookings, Bill Templates & Sub-Admins)
                     </option>
                   )}
                   {isSuperAdmin && (
@@ -6737,7 +7488,9 @@ function UsersAdminModule({
                 Account Status
               </label>
               <select
-                disabled={editingUser?.id === 'user_super_admin' || editingUser?.id === currentUser.id}
+                disabled={
+                  editingUser?.id === 'user_super_admin' || editingUser?.id === currentUser.id
+                }
                 value={form.active ? 'active' : 'disabled'}
                 onChange={(e) => setForm({ ...form, active: e.target.value === 'active' })}
                 className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm bg-white"
@@ -6748,32 +7501,137 @@ function UsersAdminModule({
             </div>
           </div>
 
-          {/* Wedding Workspace Assignment */}
-          {form.role !== 'super_admin' && (
-            <div className="p-3.5 rounded-xl bg-amber-50/50 border border-amber-200 space-y-2">
-              <div className="text-xs font-bold text-stone-800">
-                Assigned Wedding Workspaces
+          {/* Guest House Profile Fields (When Creating / Editing a Guest House Account) */}
+          {form.role === 'guest_house' && (
+            <div className="p-3.5 rounded-xl bg-sky-50/70 border border-sky-200 space-y-3">
+              <div className="text-xs font-bold text-sky-950 flex items-center gap-1.5">
+                <Building2 size={14} /> Guest House / Banquet Venue Details
               </div>
-              {accessibleWeddings.length === 0 ? (
-                <p className="text-xs text-stone-500">
-                  No wedding plans created yet. Create a wedding plan first to assign it.
-                </p>
-              ) : (
-                <div className="flex flex-wrap gap-3">
-                  {accessibleWeddings.map((w) => (
-                    <label
-                      key={w.id}
-                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-stone-300 text-xs font-semibold cursor-pointer"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={form.assignedWeddingIds.includes(w.id)}
-                        onChange={() => toggleWeddingAssignment(w.id)}
-                        className="rounded text-[#7A1C24]"
-                      />
-                      <span>{w.title}</span>
-                    </label>
-                  ))}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700 mb-1">
+                    Guest House Name <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={form.guestHouseName}
+                    onChange={(e) => setForm({ ...form, guestHouseName: e.target.value })}
+                    placeholder="Enter guest house name"
+                    className="w-full px-3 py-2 border border-stone-300 bg-white rounded-lg text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700 mb-1">City</label>
+                  <input
+                    type="text"
+                    value={form.city}
+                    onChange={(e) => setForm({ ...form, city: e.target.value })}
+                    placeholder="Enter city"
+                    className="w-full px-3 py-2 border border-stone-300 bg-white rounded-lg text-sm"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700 mb-1">
+                    Contact Phone
+                  </label>
+                  <input
+                    type="text"
+                    value={form.phone}
+                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                    placeholder="Enter phone number"
+                    className="w-full px-3 py-2 border border-stone-300 bg-white rounded-lg text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700 mb-1">GSTIN</label>
+                  <input
+                    type="text"
+                    value={form.gstin}
+                    onChange={(e) => setForm({ ...form, gstin: e.target.value })}
+                    placeholder="Enter GSTIN"
+                    className="w-full px-3 py-2 border border-stone-300 bg-white rounded-lg text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700 mb-1">Address</label>
+                  <input
+                    type="text"
+                    value={form.address}
+                    onChange={(e) => setForm({ ...form, address: e.target.value })}
+                    placeholder="Enter address"
+                    className="w-full px-3 py-2 border border-stone-300 bg-white rounded-lg text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Wedding & Function Workspace Assignment (For Sub-Admin and Member Roles) */}
+          {(form.role === 'sub_admin' || form.role === 'member') && (
+            <div className="p-3.5 rounded-xl bg-amber-50/50 border border-amber-200 space-y-3">
+              <div>
+                <div className="text-xs font-bold text-stone-800 mb-1.5">
+                  Assigned Wedding Workspaces
+                </div>
+                {accessibleWeddings.length === 0 ? (
+                  <p className="text-xs text-stone-500">
+                    No wedding plans created yet. Create a wedding plan first to assign it.
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-2.5">
+                    {accessibleWeddings.map((w) => (
+                      <label
+                        key={w.id}
+                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-stone-300 text-xs font-semibold cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={form.assignedWeddingIds.includes(w.id)}
+                          onChange={() => toggleWeddingAssignment(w.id)}
+                          className="rounded text-[#7A1C24]"
+                        />
+                        <span>{w.title}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Function / Event Scoping */}
+              {assignableEvents.length > 0 && (
+                <div className="pt-2.5 border-t border-amber-200/70">
+                  <div className="text-xs font-bold text-stone-800">
+                    Assigned Functions / Ceremonies{' '}
+                    <span className="font-normal text-stone-500">
+                      (Leave unchecked to allow all functions in assigned weddings)
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-1.5">
+                    {assignableEvents.map((ev) => {
+                      const wedTitle =
+                        state.weddings.find((w) => w.id === ev.weddingId)?.title || '';
+                      return (
+                        <label
+                          key={ev.id}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-stone-300 text-xs cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={form.assignedEventIds.includes(ev.id)}
+                            onChange={() => toggleEventAssignment(ev.id)}
+                            className="rounded text-[#7A1C24]"
+                          />
+                          <span className="font-semibold text-stone-800">{ev.name}</span>
+                          {wedTitle && (
+                            <span className="text-[10px] text-stone-400">({wedTitle})</span>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>
@@ -6798,7 +7656,7 @@ function UsersAdminModule({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-100">
-                    {MODULES.map((m) => {
+                    {roleModulesForMatrix.map((m) => {
                       const p = form.permissions[m.key] || {
                         enabled: false,
                         readOnly: false,
@@ -6894,19 +7752,30 @@ function UsersAdminModule({
   );
 }
 
-
 // ==========================================
-// MODULE: VENDOR & SERVICE BOOKINGS (WITH PHONE & BILL PHOTOS)
+// MODULE: VENDOR, HALL/ROOM BOOKINGS, BEO & BILL RECEIPTS
 // ==========================================
 function BookingsModule({
   bookings,
+  allScopeBookings = [],
+  spaces = [],
+  billTemplates = [],
+  activeWedding,
   weddingId,
+  currentUser,
+  resolvedGuestHouseInfo,
+  defaultVenue = '',
   perms,
   setState,
   stampUser,
   recordAudit,
   showToast,
 }) {
+  const isGuestHouse = currentUser?.role === 'guest_house';
+  const isSuperAdmin = currentUser?.role === 'super_admin';
+  const showGuestHouseTools = isGuestHouse || isSuperAdmin || spaces.length > 0;
+
+  const [viewMode, setViewMode] = useState('list'); // 'list' | 'calendar' | 'spaces'
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -6925,43 +7794,81 @@ function BookingsModule({
   const [lightboxPhotos, setLightboxPhotos] = useState(null);
   const [lightboxIndex, setLightboxIndex] = useState(0);
 
-  const [form, setForm] = useState({
+  // Bill Receipt & BEO Modals
+  const [receiptBooking, setReceiptBooking] = useState(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [beoBooking, setBeoBooking] = useState(null);
+
+  // Hall / Room Inventory Modal State
+  const [spaceModalOpen, setSpaceModalOpen] = useState(false);
+  const [editingSpace, setEditingSpace] = useState(null);
+  const [spaceForm, setSpaceForm] = useState({
+    name: '',
+    type: 'Banquet Hall',
+    capacity: 250,
+    totalUnits: 1,
+    rate: '',
+    notes: '',
+  });
+
+  // Calendar Date Filter
+  const [calendarDate, setCalendarDate] = useState(
+    () => activeWedding?.date || new Date().toISOString().slice(0, 10)
+  );
+
+  const emptyForm = () => ({
     title: '',
     category: 'Venue & Banquet Hall',
     vendorName: '',
     phone: '',
     altPhone: '',
-    location: '',
+    location: defaultVenue || activeWedding?.venue || '',
+    spaceId: '',
+    spaceName: defaultVenue || '',
+    slot: 'Full Day (24 Hrs)',
+    expectedPax: '',
+    followUpDate: '',
     eventTag: 'All Events',
-    bookingDate: '',
-    serviceDate: '',
+    bookingDate: new Date().toISOString().slice(0, 10),
+    serviceDate: activeWedding?.date || '',
+    checkOutDate: '',
     status: 'Confirmed',
+    lineItems: [],
+    gstEnabled: false,
+    cgstRate: 9,
+    sgstRate: 9,
     totalAmount: '',
     advancePaid: '',
     paymentMode: 'UPI',
+    installments: [],
     notes: '',
     bills: [],
   });
 
-  const openAdd = () => {
+  const [form, setForm] = useState(emptyForm);
+  const [newItemLabel, setNewItemLabel] = useState('');
+  const [newItemQty, setNewItemQty] = useState(1);
+  const [newItemRate, setNewItemRate] = useState('');
+  const [newInstallmentAmt, setNewInstallmentAmt] = useState('');
+  const [newInstallmentMode, setNewInstallmentMode] = useState('UPI');
+  const [newInstallmentRef, setNewInstallmentRef] = useState('');
+
+  const defaultTpl = useMemo(() => {
+    const list = billTemplates.length > 0 ? billTemplates : DEFAULT_BILL_TEMPLATES;
+    return list.find((t) => t.isDefault) || list[0];
+  }, [billTemplates]);
+
+  useEffect(() => {
+    if (defaultTpl && !selectedTemplateId) {
+      setSelectedTemplateId(defaultTpl.id);
+    }
+  }, [defaultTpl, selectedTemplateId]);
+
+  const openAdd = (presetDate = '') => {
     setEditing(null);
-    setForm({
-      title: '',
-      category: 'Venue & Banquet Hall',
-      vendorName: '',
-      phone: '',
-      altPhone: '',
-      location: '',
-      eventTag: 'All Events',
-      bookingDate: new Date().toISOString().slice(0, 10),
-      serviceDate: '',
-      status: 'Confirmed',
-      totalAmount: '',
-      advancePaid: '',
-      paymentMode: 'UPI',
-      notes: '',
-      bills: [],
-    });
+    const base = emptyForm();
+    if (presetDate) base.serviceDate = presetDate;
+    setForm(base);
     setModalOpen(true);
   };
 
@@ -6973,19 +7880,109 @@ function BookingsModule({
       vendorName: item.vendorName || '',
       phone: item.phone || '',
       altPhone: item.altPhone || '',
-      location: item.location || '',
+      location: item.location || defaultVenue || '',
+      spaceId: item.spaceId || '',
+      spaceName: item.spaceName || item.location || '',
+      slot: item.slot || 'Full Day (24 Hrs)',
+      expectedPax: item.expectedPax ?? '',
+      followUpDate: item.followUpDate || '',
       eventTag: item.eventTag || 'All Events',
       bookingDate: item.bookingDate || '',
       serviceDate: item.serviceDate || '',
+      checkOutDate: item.checkOutDate || '',
       status: item.status || 'Confirmed',
+      lineItems: Array.isArray(item.lineItems) ? item.lineItems : [],
+      gstEnabled: Boolean(item.gstEnabled),
+      cgstRate: item.cgstRate ?? 9,
+      sgstRate: item.sgstRate ?? 9,
       totalAmount: item.totalAmount ?? '',
       advancePaid: item.advancePaid ?? '',
       paymentMode: item.paymentMode || 'UPI',
+      installments: Array.isArray(item.installments) ? item.installments : [],
       notes: item.notes || '',
       bills: Array.isArray(item.bills) ? item.bills : [],
     });
     setModalOpen(true);
   };
+
+  // Add itemized charge & auto-recalculate totalAmount when line items exist
+  const addLineItem = () => {
+    if (!newItemLabel.trim()) return;
+    const qty = Math.max(1, Number(newItemQty) || 1);
+    const rate = Math.max(0, Number(newItemRate) || 0);
+    const nextItems = [
+      ...(form.lineItems || []),
+      { id: uid('li'), label: newItemLabel.trim(), qty, rate, amount: qty * rate },
+    ];
+    const subtotal = nextItems.reduce((s, x) => s + (Number(x.amount) || 0), 0);
+    const taxPct = form.gstEnabled ? (Number(form.cgstRate) || 0) + (Number(form.sgstRate) || 0) : 0;
+    const grand = Math.round(subtotal * (1 + taxPct / 100));
+    setForm((prev) => ({
+      ...prev,
+      lineItems: nextItems,
+      totalAmount: grand,
+    }));
+    setNewItemLabel('');
+    setNewItemQty(1);
+    setNewItemRate('');
+  };
+
+  const removeLineItem = (liId) => {
+    const nextItems = (form.lineItems || []).filter((x) => x.id !== liId);
+    const subtotal = nextItems.reduce((s, x) => s + (Number(x.amount) || 0), 0);
+    const taxPct = form.gstEnabled ? (Number(form.cgstRate) || 0) + (Number(form.sgstRate) || 0) : 0;
+    const grand = nextItems.length > 0 ? Math.round(subtotal * (1 + taxPct / 100)) : form.totalAmount;
+    setForm((prev) => ({ ...prev, lineItems: nextItems, totalAmount: grand }));
+  };
+
+  // Add payment installment & auto-update advancePaid
+  const addInstallment = () => {
+    const amt = Number(newInstallmentAmt) || 0;
+    if (amt <= 0) return;
+    const nextInst = [
+      ...(form.installments || []),
+      {
+        id: uid('inst'),
+        date: new Date().toISOString().slice(0, 10),
+        amount: amt,
+        mode: newInstallmentMode,
+        ref: newInstallmentRef.trim(),
+      },
+    ];
+    const paidSum = nextInst.reduce((s, x) => s + (Number(x.amount) || 0), 0);
+    setForm((prev) => ({
+      ...prev,
+      installments: nextInst,
+      advancePaid: paidSum,
+      paymentMode: newInstallmentMode,
+    }));
+    setNewInstallmentAmt('');
+    setNewInstallmentRef('');
+  };
+
+  const removeInstallment = (instId) => {
+    const nextInst = (form.installments || []).filter((x) => x.id !== instId);
+    const paidSum = nextInst.reduce((s, x) => s + (Number(x.amount) || 0), 0);
+    setForm((prev) => ({ ...prev, installments: nextInst, advancePaid: paidSum }));
+  };
+
+  // Conflict detection for double-booking on same date, hall/space & slot
+  const bookingConflicts = useMemo(() => {
+    if (!form.serviceDate || form.status === 'Cancelled') return [];
+    const targetSpace = (form.spaceName || form.location || '').trim().toLowerCase();
+    return allScopeBookings.filter((b) => {
+      if (editing && b.id === editing.id) return false;
+      if (b.status === 'Cancelled') return false;
+      if (!b.serviceDate || b.serviceDate !== form.serviceDate) return false;
+      const otherSpace = (b.spaceName || b.location || '').trim().toLowerCase();
+      if (!targetSpace || !otherSpace || targetSpace !== otherSpace) return false;
+      const sameSlot =
+        b.slot === form.slot ||
+        b.slot === 'Full Day (24 Hrs)' ||
+        form.slot === 'Full Day (24 Hrs)';
+      return sameSlot;
+    });
+  }, [allScopeBookings, editing, form.serviceDate, form.spaceName, form.location, form.slot, form.status]);
 
   const handleBillFiles = async (e) => {
     const files = Array.from(e.target.files || []);
@@ -7037,8 +8034,14 @@ function BookingsModule({
     if (!form.title.trim()) return;
     const payload = {
       ...form,
+      expectedPax: Number(form.expectedPax) || 0,
       totalAmount: Number(form.totalAmount) || 0,
       advancePaid: Number(form.advancePaid) || 0,
+      cgstRate: Number(form.cgstRate) || 0,
+      sgstRate: Number(form.sgstRate) || 0,
+      ownerUserId: editing?.ownerUserId || currentUser.id,
+      guestHouseId: editing?.guestHouseId || resolvedGuestHouseInfo.id || '',
+      guestHouseName: editing?.guestHouseName || resolvedGuestHouseInfo.name || '',
     };
     if (editing) {
       setState((prev) => ({
@@ -7052,6 +8055,7 @@ function BookingsModule({
     } else {
       const created = {
         id: uid('bkg'),
+        receiptNo: `RCP-${String(Date.now()).slice(-6)}`,
         weddingId,
         ...payload,
         ...stampUser(),
@@ -7085,6 +8089,379 @@ function BookingsModule({
     setBulkDeleteConfirm(false);
   };
 
+  // Hall / Room Space CRUD
+  const openSpaceAdd = () => {
+    setEditingSpace(null);
+    setSpaceForm({
+      name: '',
+      type: 'Banquet Hall',
+      capacity: 250,
+      totalUnits: 1,
+      rate: '',
+      notes: '',
+    });
+    setSpaceModalOpen(true);
+  };
+
+  const openSpaceEdit = (sp) => {
+    setEditingSpace(sp);
+    setSpaceForm({
+      name: sp.name || '',
+      type: sp.type || 'Banquet Hall',
+      capacity: sp.capacity ?? 100,
+      totalUnits: sp.totalUnits ?? 1,
+      rate: sp.rate ?? '',
+      notes: sp.notes || '',
+    });
+    setSpaceModalOpen(true);
+  };
+
+  const handleSaveSpace = (e) => {
+    e.preventDefault();
+    if (!spaceForm.name.trim()) return;
+    const ownerId = isGuestHouse ? currentUser.id : resolvedGuestHouseInfo.id || currentUser.id;
+    if (editingSpace) {
+      setState((prev) => ({
+        ...prev,
+        spaces: (prev.spaces || []).map((s) =>
+          s.id === editingSpace.id ? { ...s, ...spaceForm, rate: Number(spaceForm.rate) || 0 } : s
+        ),
+      }));
+      showToast('Space updated');
+    } else {
+      setState((prev) => ({
+        ...prev,
+        spaces: [
+          ...(prev.spaces || []),
+          {
+            id: uid('spc'),
+            ownerUserId: ownerId,
+            guestHouseName: resolvedGuestHouseInfo.name || '',
+            ...spaceForm,
+            rate: Number(spaceForm.rate) || 0,
+          },
+        ],
+      }));
+      showToast('Hall / Room added');
+    }
+    setSpaceModalOpen(false);
+  };
+
+  const handleDeleteSpace = (spId) => {
+    setState((prev) => ({
+      ...prev,
+      spaces: (prev.spaces || []).filter((s) => s.id !== spId),
+    }));
+    showToast('Space removed');
+  };
+
+  // Pure client-side PDF generator for Booking Details + Bill Receipt + Attached Receipt/Bill Photos
+  const buildBookingReceiptPDF = async (item, tpl = activeReceiptTemplate) => {
+    const escPdf = (str) =>
+      String(str ?? '')
+        .replace(/[^\x20-\x7E]/g, 'Rs.')
+        .replace(/\\/g, '\\')
+        .replace(/\(/g, '\\(')
+        .replace(/\)/g, '\\)');
+
+    const lines = [];
+    const wrapText = (text, maxChars = 76) => {
+      const words = String(text || '').split(/\s+/);
+      let curr = '';
+      const out = [];
+      for (const w of words) {
+        if (!w) continue;
+        if ((curr + ' ' + w).trim().length > maxChars) {
+          if (curr) out.push(curr);
+          curr = w;
+        } else {
+          curr = curr ? `${curr} ${w}` : w;
+        }
+      }
+      if (curr) out.push(curr);
+      return out.length ? out : [''];
+    };
+
+    const ghName =
+      tpl?.businessName ||
+      item.guestHouseName ||
+      resolvedGuestHouseInfo?.name ||
+      activeWedding?.venue ||
+      'AT Wedding Planner';
+    const rcpCode = item.receiptNo || item.id.slice(-8).toUpperCase();
+    const total = Number(item.totalAmount) || 0;
+    const paid = Number(item.advancePaid) || 0;
+    const due = Math.max(0, total - paid);
+
+    lines.push({ text: `${ghName} - BOOKING & BILL RECEIPT`, bold: true, size: 14 });
+    if (tpl?.tagline) lines.push({ text: tpl.tagline, bold: false, size: 9 });
+    lines.push({
+      text: `Receipt No: ${rcpCode} | Date: ${item.bookingDate || new Date().toISOString().slice(0, 10)} | Status: ${item.status || 'Confirmed'}`,
+      bold: false,
+      size: 9,
+    });
+    if (tpl?.gstin || resolvedGuestHouseInfo?.gstin) {
+      lines.push({
+        text: `GSTIN: ${tpl?.gstin || resolvedGuestHouseInfo?.gstin}${tpl?.sacCode ? ` | SAC: ${tpl.sacCode}` : ''}`,
+        bold: false,
+        size: 9,
+      });
+    }
+    if (tpl?.address || resolvedGuestHouseInfo?.address) {
+      wrapText(`Address: ${tpl?.address || resolvedGuestHouseInfo?.address}`).forEach((ln) =>
+        lines.push({ text: ln, bold: false, size: 9 })
+      );
+    }
+    lines.push({ text: '-------------------------------------------------------------------------', bold: false, size: 9 });
+    lines.push({ text: 'BOOKING DETAILS', bold: true, size: 11 });
+    lines.push({ text: `Booking / Event: ${item.title} (${activeWedding?.title || 'Workspace'})`, bold: false, size: 10 });
+    lines.push({
+      text: `Client / Vendor: ${item.vendorName || '-'} | Phone: ${item.phone || '-'}${item.altPhone ? ` | Alt: ${item.altPhone}` : ''}`,
+      bold: false,
+      size: 9,
+    });
+    lines.push({
+      text: `Hall / Venue: ${item.spaceName || item.location || ghName} | Date: ${item.serviceDate || 'TBD'} | Slot: ${item.slot || 'Full Day'}`,
+      bold: false,
+      size: 9,
+    });
+    if (item.expectedPax > 0 || item.followUpDate) {
+      lines.push({
+        text: `Expected Pax: ${item.expectedPax || 0}${item.followUpDate ? ` | Follow-Up: ${item.followUpDate}` : ''}`,
+        bold: false,
+        size: 9,
+      });
+    }
+    lines.push({ text: '-------------------------------------------------------------------------', bold: false, size: 9 });
+    lines.push({ text: 'CHARGES & RECEIPT SUMMARY', bold: true, size: 11 });
+
+    if (Array.isArray(item.lineItems) && item.lineItems.length > 0) {
+      item.lineItems.forEach((li) => {
+        lines.push({
+          text: `* ${li.label} - ${li.qty} x Rs.${Number(li.rate) || 0} = Rs.${Number(li.amount) || 0}`,
+          bold: false,
+          size: 9,
+        });
+      });
+    } else {
+      lines.push({ text: `* ${item.title} - Total: Rs.${total}`, bold: false, size: 9 });
+    }
+
+    lines.push({
+      text: `Total Amount: Rs.${total}   |   Advance Paid (${item.paymentMode || 'UPI'}): Rs.${paid}   |   Balance Due: Rs.${due}`,
+      bold: true,
+      size: 10,
+    });
+
+    if (Array.isArray(item.installments) && item.installments.length > 0) {
+      lines.push({ text: 'Installments:', bold: true, size: 9 });
+      item.installments.forEach((inst) => {
+        lines.push({
+          text: `  - ${inst.date}: Rs.${Number(inst.amount) || 0} (${inst.mode}${inst.ref ? `, Ref: ${inst.ref}` : ''})`,
+          bold: false,
+          size: 9,
+        });
+      });
+    }
+
+    if (item.notes) {
+      wrapText(`Notes: ${item.notes}`).forEach((ln) =>
+        lines.push({ text: ln, bold: false, size: 9 })
+      );
+    }
+    if (tpl?.upiId || tpl?.bankDetails) {
+      if (tpl.upiId) lines.push({ text: `UPI ID: ${tpl.upiId}`, bold: false, size: 9 });
+      if (tpl.bankDetails) {
+        wrapText(`Bank: ${tpl.bankDetails}`).forEach((ln) =>
+          lines.push({ text: ln, bold: false, size: 9 })
+        );
+      }
+    }
+    if (tpl?.terms) {
+      lines.push({ text: 'Terms & Conditions:', bold: true, size: 9 });
+      String(tpl.terms)
+        .split('\n')
+        .forEach((tLine) => {
+          wrapText(tLine).forEach((ln) => lines.push({ text: ln, bold: false, size: 8 }));
+        });
+    }
+    const attachedPhotos = Array.isArray(item.bills) ? item.bills : [];
+    if (attachedPhotos.length > 0) {
+      lines.push({
+        text: `Attached Bill/Receipt Photos: ${attachedPhotos.length} image(s) included in receipt`,
+        bold: false,
+        size: 9,
+      });
+    }
+
+    // Build valid single-page/multi-line PDF binary stream
+    const objects = [];
+    const addObj = (body) => {
+      objects.push(body);
+      return objects.length;
+    };
+
+    const fontRegId = addObj('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+    const fontBoldId = addObj('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>');
+
+    const streamOps = ['BT'];
+    let y = 795;
+    for (const ln of lines) {
+      if (y < 55) break;
+      const fRef = ln.bold ? `/F2 ${ln.size} Tf` : `/F1 ${ln.size} Tf`;
+      streamOps.push(fRef);
+      streamOps.push(`1 0 0 1 42 ${y} Tm`);
+      streamOps.push(`(${escPdf(ln.text)}) Tj`);
+      y -= ln.size + 6;
+    }
+    streamOps.push('ET');
+    const contentStr = streamOps.join('\n');
+    const contentId = addObj(
+      `<< /Length ${contentStr.length} >>
+stream
+${contentStr}
+endstream`
+    );
+    const pageId = addObj(
+      `<< /Type /Page /Parent 4 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${fontRegId} 0 R /F2 ${fontBoldId} 0 R >> >> /Contents ${contentId} 0 R >>`
+    );
+    const pagesId = addObj(`<< /Type /Pages /Kids [${pageId} 0 R] /Count 1 >>`);
+    const catalogId = addObj(`<< /Type /Catalog /Pages ${pagesId} 0 R >>`);
+
+    // Ensure /Pages is object 4 by reordering cleanly
+    let pdf = '%PDF-1.4\n';
+    const ordered = [
+      objects[0],
+      objects[1],
+      objects[2],
+      pagesId ? objects[pagesId - 1] : '',
+      objects[pageId - 1],
+      objects[catalogId - 1],
+    ];
+    // Rebuild cleanly with exact object numbers 1..6
+    const objs1to6 = [
+      `1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+`,
+      `2 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+`,
+      `3 0 obj
+<< /Length ${contentStr.length} >>
+stream
+${contentStr}
+endstream
+endobj
+`,
+      `4 0 obj
+<< /Type /Pages /Kids [5 0 R] /Count 1 >>
+endobj
+`,
+      `5 0 obj
+<< /Type /Page /Parent 4 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 3 0 R >>
+endobj
+`,
+      `6 0 obj
+<< /Type /Catalog /Pages 4 0 R >>
+endobj
+`,
+    ];
+
+    const offsets = [0];
+    for (const chunk of objs1to6) {
+      offsets.push(pdf.length);
+      pdf += chunk;
+    }
+    const xrefPos = pdf.length;
+    pdf += `xref
+0 7
+0000000000 65535 f 
+`;
+    for (let i = 1; i <= 6; i++) {
+      pdf += `${String(offsets[i]).padStart(10, '0')} 00000 n 
+`;
+    }
+    pdf += `trailer
+<< /Size 7 /Root 6 0 R >>
+startxref
+${xrefPos}
+%%EOF`;
+
+    const safeName = `${(item.title || 'Booking_Receipt').replace(/[^a-zA-Z0-9_-]/g, '_')}_${rcpCode}.pdf`;
+    const blob = new Blob([pdf], { type: 'application/pdf' });
+    const file = new File([blob], safeName, { type: 'application/pdf' });
+    return { blob, file, fileName: safeName };
+  };
+
+  const shareBookingPDFViaWhatsApp = async (item, tpl = activeReceiptTemplate) => {
+    const total = Number(item.totalAmount) || 0;
+    const paid = Number(item.advancePaid) || 0;
+    const due = Math.max(0, total - paid);
+    const ghName =
+      tpl?.businessName ||
+      item.guestHouseName ||
+      resolvedGuestHouseInfo?.name ||
+      activeWedding?.venue ||
+      'Venue';
+    const rcpCode = item.receiptNo || item.id.slice(-8).toUpperCase();
+
+    const summaryLines = [
+      `*${ghName}* — Booking & Receipt PDF (${rcpCode})`,
+      `Booking: ${item.title}`,
+      activeWedding?.title ? `Event/Wedding: ${activeWedding.title}` : '',
+      item.vendorName ? `Client/Vendor: ${item.vendorName}` : '',
+      item.phone ? `Phone: ${item.phone}` : '',
+      `Date & Slot: ${item.serviceDate || 'TBD'} (${item.slot || 'Full Day'})`,
+      `Hall/Venue: ${item.spaceName || item.location || ghName}`,
+      `Total: ${formatINR(total)} | Paid: ${formatINR(paid)} | Balance Due: ${formatINR(due)}`,
+      `Status: ${item.status}`,
+    ].filter(Boolean);
+    const summaryText = summaryLines.join('
+');
+
+    const { blob, file, fileName } = await buildBookingReceiptPDF(item, tpl);
+
+    // Trigger PDF download so the user always has the generated PDF ready to attach if needed
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+
+    // If browser supports Web Share with PDF files, share PDF file + summary directly
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({
+          title: `${item.title} - Receipt PDF`,
+          text: summaryText,
+          files: [file],
+        });
+        showToast(`PDF "${fileName}" shared & downloaded`);
+        return;
+      } catch (err) {
+        if (err && err.name === 'AbortError') return;
+      }
+    }
+
+    // Open WhatsApp with formatted booking & receipt summary while PDF is downloaded
+    const cleanPhone = String(item.phone || '').replace(/\D/g, '');
+    const waUrl =
+      cleanPhone.length >= 10
+        ? `https://wa.me/${cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone}?text=${encodeURIComponent(
+            summaryText
+          )}`
+        : `https://wa.me/?text=${encodeURIComponent(summaryText)}`;
+    window.open(waUrl, '_blank', 'noopener,noreferrer');
+    showToast(`Downloaded "${fileName}" — attach it in WhatsApp`);
+  };
+
+  const sendWhatsAppReceipt = (item) => {
+    shareBookingPDFViaWhatsApp(item, activeReceiptTemplate);
+  };
+
   const handleSort = (key) => {
     setSort((prev) =>
       prev.key === key ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }
@@ -7103,6 +8480,7 @@ function BookingsModule({
             (b.vendorName || '').toLowerCase().includes(q) ||
             (b.phone || '').toLowerCase().includes(q) ||
             (b.location || '').toLowerCase().includes(q) ||
+            (b.spaceName || '').toLowerCase().includes(q) ||
             (b.category || '').toLowerCase().includes(q)
           );
         }
@@ -7123,6 +8501,7 @@ function BookingsModule({
   const confirmedCount = bookings.filter(
     (b) => b.status === 'Confirmed' || b.status === 'Token Paid' || b.status === 'Completed'
   ).length;
+  const enquiryCount = bookings.filter((b) => b.status === 'Enquiry / Hold').length;
   const totalValue = bookings.reduce((sum, b) => sum + (Number(b.totalAmount) || 0), 0);
   const totalPaid = bookings.reduce((sum, b) => sum + (Number(b.advancePaid) || 0), 0);
   const totalDue = bookings.reduce(
@@ -7130,16 +8509,66 @@ function BookingsModule({
     0
   );
 
+  // Date-wise availability across all bookings in Guest House / Admin scope
+  const bookingsOnCalendarDate = useMemo(() => {
+    return allScopeBookings.filter(
+      (b) => b.serviceDate === calendarDate && b.status !== 'Cancelled'
+    );
+  }, [allScopeBookings, calendarDate]);
+
+  const activeReceiptTemplate = useMemo(() => {
+    const list = billTemplates.length > 0 ? billTemplates : DEFAULT_BILL_TEMPLATES;
+    return list.find((t) => t.id === selectedTemplateId) || defaultTpl;
+  }, [billTemplates, selectedTemplateId, defaultTpl]);
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold text-stone-900">Vendor & Service Bookings</h2>
+          <h2 className="text-xl font-bold text-stone-900">
+            {isGuestHouse ? 'Guest House Bookings, Halls & Receipts' : 'Bookings & Service Ledger'}
+          </h2>
           <p className="text-xs text-stone-500">
-            Store all vendor bookings, contact numbers, locations, payment terms & bill photos.
+            {isGuestHouse
+              ? `Manage bookings, hall/room availability, itemized bills, BEO sheets & receipts for ${
+                  resolvedGuestHouseInfo.name || 'your Guest House'
+                }.`
+              : 'Store all bookings, contact numbers, locations, payment terms, bill receipts & photos.'}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {showGuestHouseTools && (
+            <div className="inline-flex rounded-xl bg-white border border-stone-300 p-0.5 text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setViewMode('list')}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  viewMode === 'list' ? 'bg-[#7A1C24] text-white' : 'text-stone-700'
+                }`}
+              >
+                Bookings Ledger
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('calendar')}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  viewMode === 'calendar' ? 'bg-[#7A1C24] text-white' : 'text-stone-700'
+                }`}
+              >
+                Availability
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('spaces')}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  viewMode === 'spaces' ? 'bg-[#7A1C24] text-white' : 'text-stone-700'
+                }`}
+              >
+                Halls & Rooms ({spaces.length})
+              </button>
+            </div>
+          )}
+
           {perms.delete && selectedIds.length > 0 && (
             <button
               onClick={() => setBulkDeleteConfirm(true)}
@@ -7150,7 +8579,7 @@ function BookingsModule({
           )}
           {perms.add && (
             <button
-              onClick={openAdd}
+              onClick={() => openAdd()}
               className="px-4 py-2.5 rounded-xl bg-[#7A1C24] text-white text-xs font-semibold flex items-center gap-1.5 shadow-sm hover:bg-[#5E141B]"
             >
               <Plus size={16} /> Add Booking
@@ -7165,7 +8594,9 @@ function BookingsModule({
           <div className="text-xs font-semibold text-stone-500">Total Bookings</div>
           <div className="text-2xl font-bold text-stone-900 mt-1">
             {bookings.length}{' '}
-            <span className="text-xs font-normal text-emerald-700">({confirmedCount} Active)</span>
+            <span className="text-xs font-normal text-emerald-700">
+              ({confirmedCount} Active{enquiryCount > 0 ? `, ${enquiryCount} Hold` : ''})
+            </span>
           </div>
         </div>
         <div className="bg-white rounded-2xl border border-stone-200 p-4">
@@ -7182,243 +8613,482 @@ function BookingsModule({
         </div>
       </div>
 
-      {/* Filter & Sort Bar */}
-      <div className="bg-white rounded-2xl border border-stone-200 p-3.5 flex flex-wrap items-center gap-2.5">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search bookings, vendors, phone numbers, locations..."
-            className="w-full pl-9 pr-3 py-2 border border-stone-300 rounded-xl text-xs"
-          />
-        </div>
-        <select
-          value={categoryFilter}
-          onChange={(e) => setCategoryFilter(e.target.value)}
-          className="px-2.5 py-2 border border-stone-300 rounded-xl text-xs bg-white"
-        >
-          <option value="ALL">All Categories</option>
-          {BOOKING_CATEGORIES.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-2.5 py-2 border border-stone-300 rounded-xl text-xs bg-white"
-        >
-          <option value="ALL">All Statuses</option>
-          {BOOKING_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-        {(search || categoryFilter !== 'ALL' || statusFilter !== 'ALL') && (
-          <button
-            onClick={() => {
-              setSearch('');
-              setCategoryFilter('ALL');
-              setStatusFilter('ALL');
-            }}
-            className="text-xs font-semibold text-[#7A1C24] hover:underline"
-          >
-            Reset
-          </button>
-        )}
-      </div>
+      {/* VIEW 1: HALL / ROOM AVAILABILITY CALENDAR */}
+      {viewMode === 'calendar' && showGuestHouseTools && (
+        <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-xs space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="font-bold text-base text-stone-900 flex items-center gap-2">
+                <Calendar size={17} className="text-[#7A1C24]" /> Hall, Lawn & Room Availability
+              </h3>
+              <p className="text-xs text-stone-500">
+                Inspect booked slots across your halls and rooms for any date.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={calendarDate}
+                onChange={(e) => setCalendarDate(e.target.value)}
+                className="px-3 py-2 border border-stone-300 rounded-xl text-xs font-semibold"
+              />
+              {perms.add && (
+                <button
+                  type="button"
+                  onClick={() => openAdd(calendarDate)}
+                  className="px-3.5 py-2 rounded-xl bg-[#7A1C24] text-white text-xs font-semibold flex items-center gap-1"
+                >
+                  <Plus size={14} /> Book Date
+                </button>
+              )}
+            </div>
+          </div>
 
-      {/* Bookings Table */}
-      <div className="bg-white rounded-2xl border border-stone-200 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead className="bg-stone-50 border-b border-stone-200">
-              <tr>
-                {perms.delete && (
-                  <th className="px-3 py-3 w-8">
-                    <input
-                      type="checkbox"
-                      checked={filtered.length > 0 && selectedIds.length === filtered.length}
-                      onChange={(e) =>
-                        setSelectedIds(e.target.checked ? filtered.map((b) => b.id) : [])
-                      }
-                      className="rounded border-stone-300"
-                    />
-                  </th>
-                )}
-                <SortableHeader label="Booking & Vendor" sortKey="title" currentSort={sort} onSort={handleSort} />
-                <SortableHeader label="Contact & Location" sortKey="phone" currentSort={sort} onSort={handleSort} />
-                <SortableHeader label="Event & Date" sortKey="serviceDate" currentSort={sort} onSort={handleSort} />
-                <SortableHeader label="Amount & Due" sortKey="totalAmount" currentSort={sort} onSort={handleSort} align="right" />
-                <SortableHeader label="Status" sortKey="status" currentSort={sort} onSort={handleSort} />
-                <th className="px-3 py-3 text-xs font-semibold uppercase text-stone-600 text-center">
-                  Bill Photos
-                </th>
-                <th className="px-3 py-3 text-xs font-semibold uppercase text-stone-600 text-right">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-stone-100 text-xs">
-              {filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-stone-500">
-                    No bookings recorded yet. {perms.add && 'Click "+ Add Booking" to log your first vendor booking.'}
-                  </td>
-                </tr>
-              ) : (
-                filtered.map((item) => {
-                  const balance = Math.max(
-                    0,
-                    (Number(item.totalAmount) || 0) - (Number(item.advancePaid) || 0)
-                  );
-                  const billCount = Array.isArray(item.bills) ? item.bills.length : 0;
-                  const cleanPhone = String(item.phone || '').replace(/\D/g, '');
-                  return (
-                    <tr key={item.id} className="hover:bg-stone-50/70">
-                      {perms.delete && (
-                        <td className="px-3 py-3">
-                          <input
-                            type="checkbox"
-                            checked={selectedIds.includes(item.id)}
-                            onChange={(e) =>
-                              setSelectedIds((prev) =>
-                                e.target.checked
-                                  ? [...prev, item.id]
-                                  : prev.filter((id) => id !== item.id)
-                              )
-                            }
-                            className="rounded border-stone-300"
-                          />
-                        </td>
-                      )}
-                      <td className="px-3 py-3">
-                        <div className="font-bold text-stone-900">{item.title}</div>
-                        <div className="text-[11px] text-stone-600">
-                          {item.vendorName ? `${item.vendorName} • ` : ''}
-                          <span className="text-stone-500">{item.category}</span>
-                        </div>
-                        {item.notes && (
-                          <div className="text-[11px] text-stone-400 line-clamp-1 mt-0.5">
-                            {item.notes}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-3 py-3">
-                        {item.phone ? (
-                          <div className="flex items-center gap-1.5">
-                            <a
-                              href={`tel:${item.phone}`}
-                              className="inline-flex items-center gap-1 font-semibold text-[#7A1C24] hover:underline"
-                              title="Call Vendor"
-                            >
-                              <PhoneCall size={11} /> {item.phone}
-                            </a>
-                            {cleanPhone.length >= 10 && (
-                              <a
-                                href={`https://wa.me/${cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-semibold hover:bg-emerald-100"
-                                title="Chat on WhatsApp"
-                              >
-                                WA
-                              </a>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-stone-400">No phone</span>
-                        )}
-                        {item.altPhone && (
-                          <div className="text-[10px] text-stone-500">Alt: {item.altPhone}</div>
-                        )}
-                        {item.location && (
-                          <div className="text-[11px] text-stone-500 flex items-center gap-1 mt-0.5">
-                            <MapPin size={10} /> {item.location}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-3 py-3">
-                        <div className="font-medium text-stone-800">{item.eventTag || 'All Events'}</div>
+          {spaces.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {spaces.map((sp) => {
+                const slotBookings = bookingsOnCalendarDate.filter(
+                  (b) =>
+                    (b.spaceId && b.spaceId === sp.id) ||
+                    ((b.spaceName || b.location || '').toLowerCase() ===
+                      (sp.name || '').toLowerCase() &&
+                      sp.name)
+                );
+                const isBooked = slotBookings.length > 0;
+                return (
+                  <div
+                    key={sp.id}
+                    className={`p-4 rounded-xl border space-y-2 ${
+                      isBooked
+                        ? 'bg-amber-50/60 border-amber-300'
+                        : 'bg-emerald-50/40 border-emerald-200'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-bold text-sm text-stone-900">{sp.name}</div>
                         <div className="text-[11px] text-stone-500">
-                          {item.serviceDate ? `Event: ${item.serviceDate}` : 'Date TBD'}
+                          {sp.type} • Cap: {sp.capacity || '—'} • {formatINR(sp.rate)}
                         </div>
-                      </td>
-                      <td className="px-3 py-3 text-right">
-                        <div className="font-bold text-stone-900">{formatINR(item.totalAmount)}</div>
-                        <div className="text-[10px] text-emerald-700">
-                          Paid: {formatINR(item.advancePaid)} ({item.paymentMode || 'UPI'})
-                        </div>
-                        {balance > 0 && (
-                          <div className="text-[10px] font-bold text-amber-700">
-                            Due: {formatINR(balance)}
+                      </div>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          isBooked
+                            ? 'bg-amber-200 text-amber-950'
+                            : 'bg-emerald-100 text-emerald-800'
+                        }`}
+                      >
+                        {isBooked ? `${slotBookings.length} Booked` : 'Available'}
+                      </span>
+                    </div>
+                    {slotBookings.map((sb) => (
+                      <div
+                        key={sb.id}
+                        className="p-2 rounded-lg bg-white border border-stone-200 text-xs flex items-center justify-between gap-2"
+                      >
+                        <div className="min-w-0">
+                          <div className="font-bold text-stone-800 truncate">{sb.title}</div>
+                          <div className="text-[10px] text-stone-500">
+                            {sb.slot || 'Full Day'} • {sb.status}
                           </div>
-                        )}
-                      </td>
-                      <td className="px-3 py-3">
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            item.status === 'Confirmed' || item.status === 'Completed'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : item.status === 'Cancelled'
-                              ? 'bg-red-100 text-red-700'
-                              : 'bg-amber-100 text-amber-800'
-                          }`}
-                        >
-                          {item.status}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 text-center">
-                        {billCount > 0 ? (
-                          <button
-                            onClick={() => {
-                              setLightboxPhotos(item.bills);
-                              setLightboxIndex(0);
-                            }}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-300 text-[#7A1C24] font-semibold hover:bg-amber-100"
-                          >
-                            <ImageIcon size={12} /> View ({billCount})
-                          </button>
-                        ) : (
-                          <span className="text-stone-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-3 text-right">
-                        <div className="inline-flex items-center gap-1">
-                          {perms.update && (
-                            <button
-                              onClick={() => openEdit(item)}
-                              className="p-1.5 rounded-lg text-stone-600 hover:bg-stone-100"
-                              title="Edit Booking"
-                            >
-                              <Edit2 size={14} />
-                            </button>
-                          )}
-                          {perms.delete && (
-                            <button
-                              onClick={() => setDeleteTarget(item)}
-                              className="p-1.5 rounded-lg text-red-600 hover:bg-red-50"
-                              title="Delete Booking"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          )}
                         </div>
+                        {perms.update && (
+                          <button
+                            type="button"
+                            onClick={() => openEdit(sb)}
+                            className="text-[11px] font-semibold text-[#7A1C24] hover:underline shrink-0"
+                          >
+                            Edit
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="pt-2 border-t border-stone-100">
+            <div className="text-xs font-bold text-stone-700 mb-2">
+              All Scheduled Bookings on {calendarDate} ({bookingsOnCalendarDate.length})
+            </div>
+            {bookingsOnCalendarDate.length === 0 ? (
+              <p className="text-xs text-stone-500 py-4 text-center">
+                No bookings on this date. All halls and rooms are open.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {bookingsOnCalendarDate.map((b) => (
+                  <div
+                    key={b.id}
+                    className="p-3 rounded-xl bg-stone-50 border border-stone-200 flex flex-wrap items-center justify-between gap-2 text-xs"
+                  >
+                    <div>
+                      <span className="font-bold text-stone-900">{b.title}</span>{' '}
+                      <span className="text-stone-500">
+                        • {b.spaceName || b.location || 'Venue'} ({b.slot || 'Full Day'})
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded-full bg-amber-100 text-[#7A1C24] font-bold text-[10px]">
+                        {b.status}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setReceiptBooking(b)}
+                        className="px-2.5 py-1 rounded-lg bg-[#7A1C24] text-white font-semibold text-[11px]"
+                      >
+                        Receipt
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* VIEW 2: HALLS & ROOMS INVENTORY */}
+      {viewMode === 'spaces' && showGuestHouseTools && (
+        <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-xs space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="font-bold text-base text-stone-900 flex items-center gap-2">
+                <BedDouble size={17} className="text-[#7A1C24]" /> Hall, Lawn & Room Inventory
+              </h3>
+              <p className="text-xs text-stone-500">
+                Define banquet halls, lawns, and room blocks for slot conflict checks and billing.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={openSpaceAdd}
+              className="px-3.5 py-2 rounded-xl bg-[#7A1C24] text-white text-xs font-semibold flex items-center gap-1.5"
+            >
+              <Plus size={15} /> Add Hall / Room
+            </button>
+          </div>
+
+          {spaces.length === 0 ? (
+            <p className="text-xs text-stone-500 py-8 text-center">
+              No halls or rooms added yet. Click "+ Add Hall / Room" to define your inventory.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {spaces.map((sp) => (
+                <div
+                  key={sp.id}
+                  className="p-4 rounded-xl border border-stone-200 bg-stone-50/60 flex flex-col justify-between gap-3"
+                >
+                  <div>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="font-bold text-sm text-stone-900">{sp.name}</div>
+                        <div className="text-[11px] font-semibold text-[#7A1C24]">{sp.type}</div>
+                      </div>
+                      <span className="text-xs font-bold text-stone-900">
+                        {formatINR(sp.rate)}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-stone-500 mt-1.5">
+                      Capacity: {sp.capacity || 0} Guests • Units: {sp.totalUnits || 1}
+                    </div>
+                    {sp.notes && <p className="text-xs text-stone-600 mt-1">{sp.notes}</p>}
+                  </div>
+                  <div className="flex justify-end gap-1 pt-2 border-t border-stone-200/70">
+                    <button
+                      type="button"
+                      onClick={() => openSpaceEdit(sp)}
+                      className="p-1.5 rounded-lg text-stone-600 hover:bg-stone-200/60"
+                    >
+                      <Edit2 size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteSpace(sp.id)}
+                      className="p-1.5 rounded-lg text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* VIEW 3: BOOKINGS LEDGER */}
+      {viewMode === 'list' && (
+        <>
+          {/* Filter & Sort Bar */}
+          <div className="bg-white rounded-2xl border border-stone-200 p-3.5 flex flex-wrap items-center gap-2.5">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search bookings, vendors, phone numbers, halls, locations..."
+                className="w-full pl-9 pr-3 py-2 border border-stone-300 rounded-xl text-xs"
+              />
+            </div>
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="px-2.5 py-2 border border-stone-300 rounded-xl text-xs bg-white"
+            >
+              <option value="ALL">All Categories</option>
+              {BOOKING_CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-2.5 py-2 border border-stone-300 rounded-xl text-xs bg-white"
+            >
+              <option value="ALL">All Statuses</option>
+              {BOOKING_STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+            {(search || categoryFilter !== 'ALL' || statusFilter !== 'ALL') && (
+              <button
+                onClick={() => {
+                  setSearch('');
+                  setCategoryFilter('ALL');
+                  setStatusFilter('ALL');
+                }}
+                className="text-xs font-semibold text-[#7A1C24] hover:underline"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+
+          {/* Bookings Table */}
+          <div className="bg-white rounded-2xl border border-stone-200 shadow-xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-stone-50 border-b border-stone-200">
+                  <tr>
+                    {perms.delete && (
+                      <th className="px-3 py-3 w-8">
+                        <input
+                          type="checkbox"
+                          checked={filtered.length > 0 && selectedIds.length === filtered.length}
+                          onChange={(e) =>
+                            setSelectedIds(e.target.checked ? filtered.map((b) => b.id) : [])
+                          }
+                          className="rounded border-stone-300"
+                        />
+                      </th>
+                    )}
+                    <SortableHeader label="Booking & Vendor" sortKey="title" currentSort={sort} onSort={handleSort} />
+                    <SortableHeader label="Contact & Hall/Venue" sortKey="phone" currentSort={sort} onSort={handleSort} />
+                    <SortableHeader label="Event, Date & Slot" sortKey="serviceDate" currentSort={sort} onSort={handleSort} />
+                    <SortableHeader label="Amount & Due" sortKey="totalAmount" currentSort={sort} onSort={handleSort} align="right" />
+                    <SortableHeader label="Status" sortKey="status" currentSort={sort} onSort={handleSort} />
+                    <th className="px-3 py-3 text-xs font-semibold uppercase text-stone-600 text-center">
+                      Bill Photos
+                    </th>
+                    <th className="px-3 py-3 text-xs font-semibold uppercase text-stone-600 text-right">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100 text-xs">
+                  {filtered.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-4 py-10 text-center text-stone-500">
+                        No bookings recorded yet.{' '}
+                        {perms.add && 'Click "+ Add Booking" to log your first booking.'}
                       </td>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                  ) : (
+                    filtered.map((item) => {
+                      const balance = Math.max(
+                        0,
+                        (Number(item.totalAmount) || 0) - (Number(item.advancePaid) || 0)
+                      );
+                      const billCount = Array.isArray(item.bills) ? item.bills.length : 0;
+                      const cleanPhone = String(item.phone || '').replace(/\D/g, '');
+                      return (
+                        <tr key={item.id} className="hover:bg-stone-50/70">
+                          {perms.delete && (
+                            <td className="px-3 py-3">
+                              <input
+                                type="checkbox"
+                                checked={selectedIds.includes(item.id)}
+                                onChange={(e) =>
+                                  setSelectedIds((prev) =>
+                                    e.target.checked
+                                      ? [...prev, item.id]
+                                      : prev.filter((id) => id !== item.id)
+                                  )
+                                }
+                                className="rounded border-stone-300"
+                              />
+                            </td>
+                          )}
+                          <td className="px-3 py-3">
+                            <div className="font-bold text-stone-900">{item.title}</div>
+                            <div className="text-[11px] text-stone-600">
+                              {item.vendorName ? `${item.vendorName} • ` : ''}
+                              <span className="text-stone-500">{item.category}</span>
+                            </div>
+                            {item.expectedPax > 0 && (
+                              <div className="text-[10px] text-stone-500">
+                                Pax: {item.expectedPax}
+                                {item.followUpDate ? ` • Follow-up: ${item.followUpDate}` : ''}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-3 py-3">
+                            {item.phone ? (
+                              <div className="flex items-center gap-1.5">
+                                <a
+                                  href={`tel:${item.phone}`}
+                                  className="inline-flex items-center gap-1 font-semibold text-[#7A1C24] hover:underline"
+                                  title="Call"
+                                >
+                                  <PhoneCall size={11} /> {item.phone}
+                                </a>
+                                {cleanPhone.length >= 10 && (
+                                  <a
+                                    href={`https://wa.me/${
+                                      cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone
+                                    }`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-semibold hover:bg-emerald-100"
+                                    title="Chat on WhatsApp"
+                                  >
+                                    WA
+                                  </a>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-stone-400">No phone</span>
+                            )}
+                            {(item.spaceName || item.location) && (
+                              <div className="text-[11px] text-stone-500 flex items-center gap-1 mt-0.5">
+                                <MapPin size={10} /> {item.spaceName || item.location}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-3 py-3">
+                            <div className="font-medium text-stone-800">
+                              {item.eventTag || 'All Events'}
+                            </div>
+                            <div className="text-[11px] text-stone-500">
+                              {item.serviceDate ? `${item.serviceDate}` : 'Date TBD'}
+                              {item.slot ? ` • ${item.slot}` : ''}
+                            </div>
+                          </td>
+                          <td className="px-3 py-3 text-right">
+                            <div className="font-bold text-stone-900">
+                              {formatINR(item.totalAmount)}
+                            </div>
+                            <div className="text-[10px] text-emerald-700">
+                              Paid: {formatINR(item.advancePaid)} ({item.paymentMode || 'UPI'})
+                            </div>
+                            {balance > 0 && (
+                              <div className="text-[10px] font-bold text-amber-700">
+                                Due: {formatINR(balance)}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-3 py-3">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                item.status === 'Confirmed' || item.status === 'Completed'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : item.status === 'Cancelled'
+                                  ? 'bg-red-100 text-red-700'
+                                  : 'bg-amber-100 text-amber-800'
+                              }`}
+                            >
+                              {item.status}
+                            </span>
+                          </td>
+                          <td className="px-3 py-3 text-center">
+                            {billCount > 0 ? (
+                              <button
+                                onClick={() => {
+                                  setLightboxPhotos(item.bills);
+                                  setLightboxIndex(0);
+                                }}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-300 text-[#7A1C24] font-semibold hover:bg-amber-100"
+                              >
+                                <ImageIcon size={12} /> View ({billCount})
+                              </button>
+                            ) : (
+                              <span className="text-stone-400">—</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-3 text-right">
+                            <div className="inline-flex items-center gap-1 justify-end flex-wrap">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedTemplateId(defaultTpl?.id || '');
+                                  setReceiptBooking(item);
+                                }}
+                                title="Generate Bill Receipt"
+                                className="px-2 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-[#7A1C24] border border-amber-300 text-[11px] font-semibold inline-flex items-center gap-1"
+                              >
+                                <Receipt size={12} /> Bill
+                              </button>
+                              {showGuestHouseTools && (
+                                <button
+                                  type="button"
+                                  onClick={() => setBeoBooking(item)}
+                                  title="Banquet Event Order (BEO)"
+                                  className="px-2 py-1 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-800 text-[11px] font-semibold inline-flex items-center gap-1"
+                                >
+                                  <ClipboardList size={12} /> BEO
+                                </button>
+                              )}
+                              {perms.update && (
+                                <button
+                                  onClick={() => openEdit(item)}
+                                  className="p-1.5 rounded-lg text-stone-600 hover:bg-stone-100"
+                                  title="Edit Booking"
+                                >
+                                  <Edit2 size={14} />
+                                </button>
+                              )}
+                              {perms.delete && (
+                                <button
+                                  onClick={() => setDeleteTarget(item)}
+                                  className="p-1.5 rounded-lg text-red-600 hover:bg-red-50"
+                                  title="Delete Booking"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
 
-      {/* Add / Edit Booking Modal */}
+      {/* Add / Edit Booking Modal (with Conflict Alerts, Line Items, Installments & Bill Photos) */}
       <Modal
         isOpen={modalOpen}
         onClose={() => {
@@ -7426,10 +9096,23 @@ function BookingsModule({
           setModalOpen(false);
         }}
         title={editing ? 'Edit Booking Details' : 'Add New Booking'}
-        subtitle="Record vendor contact info, booking dates, payment summary & bill photos"
+        subtitle="Record hall/slot, contact info, itemized charges, installments & bill photos"
         maxWidth="max-w-2xl"
       >
         <form onSubmit={handleSave} className="space-y-4">
+          {bookingConflicts.length > 0 && (
+            <div className="p-3 rounded-xl bg-red-50 border border-red-300 text-red-800 text-xs flex items-start gap-2">
+              <AlertTriangle size={16} className="shrink-0 mt-0.5 text-red-600" />
+              <div>
+                <div className="font-bold">Double-Booking Conflict Detected!</div>
+                <div>
+                  Overlaps with {bookingConflicts.map((c) => `"${c.title}" (${c.status})`).join(', ')}{' '}
+                  on {form.serviceDate} ({form.slot}).
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-stone-700 mb-1">
@@ -7440,7 +9123,7 @@ function BookingsModule({
                 required
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
-                placeholder="Enter booking or service title"
+                placeholder="Enter booking or client title"
                 className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
               />
             </div>
@@ -7456,13 +9139,13 @@ function BookingsModule({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-semibold text-stone-700 mb-1">
-                Vendor / Contact Person
+                Client / Vendor Name
               </label>
               <input
                 type="text"
                 value={form.vendorName}
                 onChange={(e) => setForm({ ...form, vendorName: e.target.value })}
-                placeholder="Enter vendor or contact name"
+                placeholder="Enter client or vendor name"
                 className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
               />
             </div>
@@ -7492,19 +9175,51 @@ function BookingsModule({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-semibold text-stone-700 mb-1">
-                Address / Venue Location
+                Venue / Hall / Room
               </label>
-              <input
-                type="text"
-                value={form.location}
-                onChange={(e) => setForm({ ...form, location: e.target.value })}
-                placeholder="Enter address or location"
-                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
-              />
+              {spaces.length > 0 ? (
+                <select
+                  value={form.spaceId || ''}
+                  onChange={(e) => {
+                    const chosen = spaces.find((s) => s.id === e.target.value);
+                    setForm({
+                      ...form,
+                      spaceId: chosen ? chosen.id : '',
+                      spaceName: chosen ? chosen.name : form.location,
+                      location: chosen ? chosen.name : form.location,
+                    });
+                  }}
+                  className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm bg-white"
+                >
+                  <option value="">{defaultVenue || 'Custom / Select Space'}</option>
+                  {spaces.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.type})
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={form.location}
+                  onChange={(e) =>
+                    setForm({ ...form, location: e.target.value, spaceName: e.target.value })
+                  }
+                  placeholder="Enter venue or hall name"
+                  className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+                />
+              )}
             </div>
+            <DropdownWithOther
+              label="Time Slot"
+              value={form.slot}
+              onChange={(val) => setForm({ ...form, slot: val })}
+              options={BOOKING_SLOTS}
+              placeholder="Enter time slot"
+            />
             <DropdownWithOther
               label="For Ceremony / Event"
               value={form.eventTag}
@@ -7517,18 +9232,7 @@ function BookingsModule({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-semibold text-stone-700 mb-1">
-                Booking Date
-              </label>
-              <input
-                type="date"
-                value={form.bookingDate}
-                onChange={(e) => setForm({ ...form, bookingDate: e.target.value })}
-                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-stone-700 mb-1">
-                Service / Event Date
+                Event / Check-In Date
               </label>
               <input
                 type="date"
@@ -7537,13 +9241,174 @@ function BookingsModule({
                 className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
               />
             </div>
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">
+                Expected Pax (Guests)
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={form.expectedPax}
+                onChange={(e) => setForm({ ...form, expectedPax: e.target.value })}
+                placeholder="0"
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+              />
+            </div>
             <DropdownWithOther
-              label="Booking Status"
+              label="Booking / Lead Status"
               value={form.status}
               onChange={(val) => setForm({ ...form, status: val })}
               options={BOOKING_STATUSES}
               placeholder="Enter booking status"
             />
+          </div>
+
+          {form.status === 'Enquiry / Hold' && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-xl bg-amber-50/60 border border-amber-200">
+              <div>
+                <label className="block text-xs font-semibold text-stone-700 mb-1">
+                  Next Follow-Up Date
+                </label>
+                <input
+                  type="date"
+                  value={form.followUpDate}
+                  onChange={(e) => setForm({ ...form, followUpDate: e.target.value })}
+                  className="w-full px-3 py-2 border border-stone-300 bg-white rounded-lg text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-stone-700 mb-1">
+                  Booking Date
+                </label>
+                <input
+                  type="date"
+                  value={form.bookingDate}
+                  onChange={(e) => setForm({ ...form, bookingDate: e.target.value })}
+                  className="w-full px-3 py-2 border border-stone-300 bg-white rounded-lg text-sm"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Itemized Package / Bill Line Items */}
+          <div className="p-3.5 rounded-xl bg-stone-50 border border-stone-200 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-stone-800">
+                Itemized Charges (Optional — Auto-Calculates Total)
+              </span>
+              <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-stone-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={Boolean(form.gstEnabled)}
+                  onChange={(e) => {
+                    const enabled = e.target.checked;
+                    const sub = (form.lineItems || []).reduce(
+                      (s, x) => s + (Number(x.amount) || 0),
+                      0
+                    );
+                    const pct = enabled
+                      ? (Number(form.cgstRate) || 0) + (Number(form.sgstRate) || 0)
+                      : 0;
+                    setForm((prev) => ({
+                      ...prev,
+                      gstEnabled: enabled,
+                      totalAmount: sub > 0 ? Math.round(sub * (1 + pct / 100)) : prev.totalAmount,
+                    }));
+                  }}
+                />
+                <span>Apply GST</span>
+              </label>
+            </div>
+
+            {form.gstEnabled && (
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <label className="block text-[11px] font-semibold text-stone-600 mb-0.5">
+                    CGST (%)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="50"
+                    step="0.5"
+                    value={form.cgstRate}
+                    onChange={(e) => setForm({ ...form, cgstRate: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-stone-300 bg-white rounded-lg text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-stone-600 mb-0.5">
+                    SGST (%)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="50"
+                    step="0.5"
+                    value={form.sgstRate}
+                    onChange={(e) => setForm({ ...form, sgstRate: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-stone-300 bg-white rounded-lg text-xs"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+              <input
+                type="text"
+                value={newItemLabel}
+                onChange={(e) => setNewItemLabel(e.target.value)}
+                placeholder="Item (e.g. Hall / Rooms / Plate)"
+                className="sm:col-span-2 px-2.5 py-1.5 border border-stone-300 bg-white rounded-lg text-xs"
+              />
+              <input
+                type="number"
+                min="1"
+                value={newItemQty}
+                onChange={(e) => setNewItemQty(e.target.value)}
+                placeholder="Qty"
+                className="px-2.5 py-1.5 border border-stone-300 bg-white rounded-lg text-xs"
+              />
+              <div className="flex gap-1">
+                <input
+                  type="number"
+                  min="0"
+                  value={newItemRate}
+                  onChange={(e) => setNewItemRate(e.target.value)}
+                  placeholder="Rate ₹"
+                  className="w-full px-2.5 py-1.5 border border-stone-300 bg-white rounded-lg text-xs"
+                />
+                <button
+                  type="button"
+                  onClick={addLineItem}
+                  className="px-2.5 py-1.5 rounded-lg bg-[#7A1C24] text-white text-xs font-semibold shrink-0"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            {(form.lineItems || []).length > 0 && (
+              <div className="divide-y divide-stone-200 bg-white rounded-lg border border-stone-200 text-xs">
+                {form.lineItems.map((li) => (
+                  <div key={li.id} className="px-3 py-1.5 flex items-center justify-between gap-2">
+                    <span className="font-medium text-stone-800">
+                      {li.label} ({li.qty} × {formatINR(li.rate)})
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-stone-900">{formatINR(li.amount)}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeLineItem(li.id)}
+                        className="text-red-600 hover:underline"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -7580,6 +9445,71 @@ function BookingsModule({
               options={PAYMENT_MODES}
               placeholder="Enter payment mode"
             />
+          </div>
+
+          {/* Payment Installment Ledger */}
+          <div className="p-3.5 rounded-xl bg-emerald-50/40 border border-emerald-200/80 space-y-2">
+            <div className="text-xs font-bold text-stone-800">
+              Payment Installments ({(form.installments || []).length})
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+              <input
+                type="number"
+                min="0"
+                value={newInstallmentAmt}
+                onChange={(e) => setNewInstallmentAmt(e.target.value)}
+                placeholder="Payment ₹"
+                className="px-2.5 py-1.5 border border-stone-300 bg-white rounded-lg text-xs"
+              />
+              <select
+                value={newInstallmentMode}
+                onChange={(e) => setNewInstallmentMode(e.target.value)}
+                className="px-2.5 py-1.5 border border-stone-300 bg-white rounded-lg text-xs"
+              >
+                {PAYMENT_MODES.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="text"
+                value={newInstallmentRef}
+                onChange={(e) => setNewInstallmentRef(e.target.value)}
+                placeholder="UTR / Receipt Ref"
+                className="px-2.5 py-1.5 border border-stone-300 bg-white rounded-lg text-xs"
+              />
+              <button
+                type="button"
+                onClick={addInstallment}
+                className="px-3 py-1.5 rounded-lg bg-emerald-700 text-white text-xs font-semibold"
+              >
+                Add Payment
+              </button>
+            </div>
+            {(form.installments || []).length > 0 && (
+              <div className="divide-y divide-emerald-100 bg-white rounded-lg border border-emerald-200 text-xs">
+                {form.installments.map((inst) => (
+                  <div key={inst.id} className="px-3 py-1.5 flex items-center justify-between">
+                    <span>
+                      {inst.date} • {inst.mode} {inst.ref ? `(${inst.ref})` : ''}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-emerald-800">
+                        {formatINR(inst.amount)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeInstallment(inst.id)}
+                        className="text-red-600"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div>
@@ -7702,6 +9632,358 @@ function BookingsModule({
         </form>
       </Modal>
 
+      {/* Add / Edit Hall or Room Modal */}
+      <Modal
+        isOpen={spaceModalOpen}
+        onClose={() => setSpaceModalOpen(false)}
+        title={editingSpace ? 'Edit Hall / Room' : 'Add Hall / Lawn / Room'}
+      >
+        <form onSubmit={handleSaveSpace} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">
+                Space Name <span className="text-red-600">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                value={spaceForm.name}
+                onChange={(e) => setSpaceForm({ ...spaceForm, name: e.target.value })}
+                placeholder="e.g. Grand Banquet Hall / Royal Lawn"
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+              />
+            </div>
+            <DropdownWithOther
+              label="Category"
+              value={spaceForm.type}
+              onChange={(val) => setSpaceForm({ ...spaceForm, type: val })}
+              options={['Banquet Hall', 'Lawn', 'AC Rooms', 'Bridal Suite', 'Conference / Dining']}
+              placeholder="Enter space type"
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">Capacity</label>
+              <input
+                type="number"
+                min="1"
+                value={spaceForm.capacity}
+                onChange={(e) => setSpaceForm({ ...spaceForm, capacity: e.target.value })}
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">
+                Rooms / Units
+              </label>
+              <input
+                type="number"
+                min="1"
+                value={spaceForm.totalUnits}
+                onChange={(e) => setSpaceForm({ ...spaceForm, totalUnits: e.target.value })}
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">
+                Base Tariff (₹)
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={spaceForm.rate}
+                onChange={(e) => setSpaceForm({ ...spaceForm, rate: e.target.value })}
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-stone-700 mb-1">Notes</label>
+            <input
+              type="text"
+              value={spaceForm.notes}
+              onChange={(e) => setSpaceForm({ ...spaceForm, notes: e.target.value })}
+              placeholder="Amenities, AC details, inclusions..."
+              className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-3 border-t border-stone-200">
+            <button
+              type="button"
+              onClick={() => setSpaceModalOpen(false)}
+              className="px-4 py-2 rounded-lg border border-stone-300 text-xs font-semibold"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 rounded-lg bg-[#7A1C24] text-white text-xs font-semibold"
+            >
+              Save Space
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Bill Receipt Generator Modal */}
+      <Modal
+        isOpen={Boolean(receiptBooking)}
+        onClose={() => setReceiptBooking(null)}
+        title="Generate Bill Receipt"
+        subtitle={receiptBooking?.title}
+        maxWidth="max-w-2xl"
+      >
+        {receiptBooking && activeReceiptTemplate && (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 bg-stone-50 p-3 rounded-xl border border-stone-200">
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-bold text-stone-700">Bill Template:</label>
+                <select
+                  value={selectedTemplateId}
+                  onChange={(e) => setSelectedTemplateId(e.target.value)}
+                  className="px-2.5 py-1.5 border border-stone-300 bg-white rounded-lg text-xs font-semibold"
+                >
+                  {(billTemplates.length > 0 ? billTemplates : DEFAULT_BILL_TEMPLATES).map(
+                    (tpl) => (
+                      <option key={tpl.id} value={tpl.id}>
+                        {tpl.name} {tpl.isDefault ? '(Default)' : ''}
+                      </option>
+                    )
+                  )}
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => shareBookingPDFViaWhatsApp(receiptBooking, activeReceiptTemplate)}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold inline-flex items-center gap-1"
+                >
+                  <Share2 size={13} /> Share PDF on WhatsApp
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-3 py-1.5 rounded-lg bg-[#7A1C24] text-white text-xs font-semibold inline-flex items-center gap-1"
+                >
+                  <Printer size={13} /> Print / PDF
+                </button>
+              </div>
+            </div>
+
+            {/* Printable Receipt Slip */}
+            <div className="p-6 rounded-2xl border-2 border-stone-300 bg-white text-stone-900 space-y-4">
+              <div className="flex items-start justify-between border-b border-stone-200 pb-4">
+                <div>
+                  <h4 className="text-lg font-extrabold text-[#7A1C24]">
+                    {activeReceiptTemplate.businessName ||
+                      receiptBooking.guestHouseName ||
+                      resolvedGuestHouseInfo.name ||
+                      activeWedding?.venue ||
+                      'AT Wedding Planner'}
+                  </h4>
+                  {activeReceiptTemplate.tagline && (
+                    <p className="text-xs text-stone-500">{activeReceiptTemplate.tagline}</p>
+                  )}
+                  {(activeReceiptTemplate.address || resolvedGuestHouseInfo.address) && (
+                    <p className="text-xs text-stone-600 mt-1">
+                      {activeReceiptTemplate.address || resolvedGuestHouseInfo.address}
+                    </p>
+                  )}
+                  <div className="text-[11px] text-stone-500 mt-0.5 flex flex-wrap gap-3">
+                    {(activeReceiptTemplate.phone || resolvedGuestHouseInfo.phone) && (
+                      <span>
+                        Ph: {activeReceiptTemplate.phone || resolvedGuestHouseInfo.phone}
+                      </span>
+                    )}
+                    {(activeReceiptTemplate.gstin || resolvedGuestHouseInfo.gstin) && (
+                      <span>
+                        GSTIN: {activeReceiptTemplate.gstin || resolvedGuestHouseInfo.gstin}
+                      </span>
+                    )}
+                    {activeReceiptTemplate.sacCode && (
+                      <span>SAC: {activeReceiptTemplate.sacCode}</span>
+                    )}
+                  </div>
+                </div>
+                <div className="text-right text-xs">
+                  <div className="font-bold uppercase tracking-wider text-stone-500">
+                    Bill Receipt
+                  </div>
+                  <div className="font-bold text-sm text-stone-900 mt-0.5">
+                    {receiptBooking.receiptNo || receiptBooking.id.slice(-8).toUpperCase()}
+                  </div>
+                  <div className="text-stone-500 mt-0.5">
+                    Date: {receiptBooking.bookingDate || new Date().toISOString().slice(0, 10)}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-stone-50 p-3.5 rounded-xl">
+                <div>
+                  <div className="text-[10px] font-bold uppercase text-stone-400">
+                    Billed To / Client
+                  </div>
+                  <div className="font-bold text-stone-900">
+                    {receiptBooking.vendorName || receiptBooking.title}
+                  </div>
+                  {receiptBooking.phone && <div className="text-stone-600">{receiptBooking.phone}</div>}
+                </div>
+                <div className="sm:text-right">
+                  <div className="text-[10px] font-bold uppercase text-stone-400">
+                    Event & Venue Details
+                  </div>
+                  <div className="font-semibold text-stone-800">{activeWedding?.title}</div>
+                  <div className="text-stone-600">
+                    {receiptBooking.serviceDate || 'Date TBD'} • {receiptBooking.slot || 'Full Day'}
+                  </div>
+                  <div className="text-stone-600">
+                    {receiptBooking.spaceName || receiptBooking.location || ''}
+                  </div>
+                </div>
+              </div>
+
+              {/* Charges Table */}
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-stone-300 text-stone-600">
+                    <th className="py-2 text-left">Description</th>
+                    <th className="py-2 text-center">Qty</th>
+                    <th className="py-2 text-right">Rate</th>
+                    <th className="py-2 text-right">Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100">
+                  {Array.isArray(receiptBooking.lineItems) && receiptBooking.lineItems.length > 0 ? (
+                    receiptBooking.lineItems.map((li) => (
+                      <tr key={li.id}>
+                        <td className="py-2 font-medium">{li.label}</td>
+                        <td className="py-2 text-center">{li.qty}</td>
+                        <td className="py-2 text-right">{formatINR(li.rate)}</td>
+                        <td className="py-2 text-right font-semibold">{formatINR(li.amount)}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td className="py-2 font-medium">{receiptBooking.title}</td>
+                      <td className="py-2 text-center">1</td>
+                      <td className="py-2 text-right">{formatINR(receiptBooking.totalAmount)}</td>
+                      <td className="py-2 text-right font-semibold">
+                        {formatINR(receiptBooking.totalAmount)}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+
+              {/* Totals Summary */}
+              {(() => {
+                const total = Number(receiptBooking.totalAmount) || 0;
+                const paid = Number(receiptBooking.advancePaid) || 0;
+                const due = Math.max(0, total - paid);
+                return (
+                  <div className="flex justify-end pt-2 border-t border-stone-200 text-xs">
+                    <div className="w-64 space-y-1.5">
+                      <div className="flex justify-between font-bold text-sm text-stone-900">
+                        <span>Total Amount</span>
+                        <span>{formatINR(total)}</span>
+                      </div>
+                      <div className="flex justify-between text-emerald-700 font-semibold">
+                        <span>Paid ({receiptBooking.paymentMode || 'UPI'})</span>
+                        <span>{formatINR(paid)}</span>
+                      </div>
+                      <div className="flex justify-between text-amber-800 font-bold pt-1 border-t border-stone-200">
+                        <span>Balance Due</span>
+                        <span>{formatINR(due)}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {(activeReceiptTemplate.upiId || activeReceiptTemplate.bankDetails) && (
+                <div className="p-3 rounded-xl bg-amber-50/60 border border-amber-200/70 text-xs space-y-0.5">
+                  {activeReceiptTemplate.upiId && (
+                    <div>
+                      <strong>UPI ID:</strong> {activeReceiptTemplate.upiId}
+                    </div>
+                  )}
+                  {activeReceiptTemplate.bankDetails && (
+                    <div>
+                      <strong>Bank Details:</strong> {activeReceiptTemplate.bankDetails}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-end justify-between gap-4 pt-3 border-t border-stone-200 text-[11px] text-stone-500">
+                <div className="max-w-md whitespace-pre-line">
+                  {activeReceiptTemplate.terms}
+                </div>
+                <div className="text-right font-semibold text-stone-700">
+                  {activeReceiptTemplate.signatoryLabel || 'Authorized Signatory'}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Banquet Event Order (BEO) Modal */}
+      <Modal
+        isOpen={Boolean(beoBooking)}
+        onClose={() => setBeoBooking(null)}
+        title="Banquet Event Order (BEO)"
+        subtitle="Staff & Operations Sheet"
+        maxWidth="max-w-xl"
+      >
+        {beoBooking && (
+          <div className="space-y-4 text-xs">
+            <div className="p-4 rounded-xl bg-stone-50 border border-stone-200 space-y-2">
+              <div className="flex items-center justify-between">
+                <h4 className="font-bold text-base text-stone-900">{beoBooking.title}</h4>
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-[#7A1C24] font-bold text-[10px]">
+                  {beoBooking.status}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-stone-700 pt-1">
+                <div>
+                  <strong>Wedding:</strong> {activeWedding?.title}
+                </div>
+                <div>
+                  <strong>Date:</strong> {beoBooking.serviceDate || 'TBD'}
+                </div>
+                <div>
+                  <strong>Hall / Space:</strong> {beoBooking.spaceName || beoBooking.location || '—'}
+                </div>
+                <div>
+                  <strong>Slot:</strong> {beoBooking.slot || 'Full Day'}
+                </div>
+                <div>
+                  <strong>Expected Pax:</strong> {beoBooking.expectedPax || 0} Guests
+                </div>
+                <div>
+                  <strong>Contact:</strong> {beoBooking.vendorName || '—'} ({beoBooking.phone || '—'})
+                </div>
+              </div>
+              {beoBooking.notes && (
+                <div className="pt-2 border-t border-stone-200 text-stone-700">
+                  <strong>Setup & Operational Notes:</strong> {beoBooking.notes}
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="px-4 py-2 rounded-lg bg-[#7A1C24] text-white font-semibold inline-flex items-center gap-1.5"
+              >
+                <Printer size={14} /> Print BEO
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
       {/* Bill Photo Lightbox Gallery */}
       <Modal
         isOpen={Boolean(lightboxPhotos)}
@@ -7762,6 +10044,467 @@ function BookingsModule({
         onConfirm={handleBulkDelete}
         onCancel={() => setBulkDeleteConfirm(false)}
       />
+    </div>
+  );
+}
+
+// ==========================================
+// MODULE: MULTI-TEMPLATE BILL & RECEIPT STUDIO
+// ==========================================
+function BillTemplatesModule({
+  templates = [],
+  currentUser,
+  resolvedGuestHouseInfo,
+  setState,
+  recordAudit,
+  showToast,
+}) {
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingTpl, setEditingTpl] = useState(null);
+  const [previewTpl, setPreviewTpl] = useState(null);
+
+  const blankTemplate = () => ({
+    name: '',
+    style: 'classic',
+    businessName: resolvedGuestHouseInfo?.name || '',
+    tagline: 'Banquet Hall, Lawn & Guest House',
+    address: resolvedGuestHouseInfo?.address || '',
+    phone: resolvedGuestHouseInfo?.phone || '',
+    email: '',
+    gstin: resolvedGuestHouseInfo?.gstin || '',
+    sacCode: '996311',
+    defaultCgst: 9,
+    defaultSgst: 9,
+    upiId: '',
+    bankDetails: '',
+    signatoryLabel: 'Authorized Signatory',
+    terms:
+      '1. 50% advance required at booking confirmation.
+2. Balance due prior to event start.
+3. Terms & conditions apply as per venue agreement.',
+    isDefault: false,
+  });
+
+  const [form, setForm] = useState(blankTemplate);
+
+  const openAdd = () => {
+    setEditingTpl(null);
+    setForm(blankTemplate());
+    setModalOpen(true);
+  };
+
+  const openEdit = (tpl) => {
+    setEditingTpl(tpl);
+    setForm({
+      name: tpl.name || '',
+      style: tpl.style || 'classic',
+      businessName: tpl.businessName || resolvedGuestHouseInfo?.name || '',
+      tagline: tpl.tagline || '',
+      address: tpl.address || '',
+      phone: tpl.phone || '',
+      email: tpl.email || '',
+      gstin: tpl.gstin || '',
+      sacCode: tpl.sacCode || '996311',
+      defaultCgst: tpl.defaultCgst ?? 9,
+      defaultSgst: tpl.defaultSgst ?? 9,
+      upiId: tpl.upiId || '',
+      bankDetails: tpl.bankDetails || '',
+      signatoryLabel: tpl.signatoryLabel || 'Authorized Signatory',
+      terms: tpl.terms || '',
+      isDefault: Boolean(tpl.isDefault),
+    });
+    setModalOpen(true);
+  };
+
+  const duplicateTemplate = (tpl) => {
+    const copy = {
+      ...tpl,
+      id: uid('tpl'),
+      name: `${tpl.name} (Copy)`,
+      isDefault: false,
+      ownerUserId: currentUser.id,
+    };
+    setState((prev) => ({
+      ...prev,
+      billTemplates: [...(prev.billTemplates || DEFAULT_BILL_TEMPLATES), copy],
+    }));
+    recordAudit('Bill Templates', 'Created', `Duplicated bill template "${copy.name}"`);
+    showToast('Template duplicated');
+  };
+
+  const setAsDefault = (tplId) => {
+    setState((prev) => ({
+      ...prev,
+      billTemplates: (prev.billTemplates || DEFAULT_BILL_TEMPLATES).map((t) => ({
+        ...t,
+        isDefault: t.id === tplId,
+      })),
+    }));
+    showToast('Default bill template updated');
+  };
+
+  const deleteTemplate = (tpl) => {
+    if ((state.billTemplates || []).length <= 1) {
+      showToast('At least one bill template is required', 'error');
+      return;
+    }
+    setState((prev) => {
+      const remaining = (prev.billTemplates || []).filter((t) => t.id !== tpl.id);
+      if (tpl.isDefault && remaining[0]) remaining[0].isDefault = true;
+      return { ...prev, billTemplates: remaining };
+    });
+    recordAudit('Bill Templates', 'Deleted', `Deleted bill template "${tpl.name}"`);
+    showToast('Template deleted');
+  };
+
+  const handleSave = (e) => {
+    e.preventDefault();
+    if (!form.name.trim()) return;
+    const payload = {
+      ...form,
+      name: form.name.trim(),
+      defaultCgst: Number(form.defaultCgst) || 0,
+      defaultSgst: Number(form.defaultSgst) || 0,
+    };
+
+    if (editingTpl) {
+      setState((prev) => {
+        const base = (prev.billTemplates || DEFAULT_BILL_TEMPLATES).map((t) =>
+          t.id === editingTpl.id ? { ...t, ...payload } : t
+        );
+        const normalized = payload.isDefault
+          ? base.map((t) => ({ ...t, isDefault: t.id === editingTpl.id }))
+          : base;
+        return { ...prev, billTemplates: normalized };
+      });
+      recordAudit('Bill Templates', 'Updated', `Updated bill template "${payload.name}"`);
+      showToast('Bill template updated');
+    } else {
+      const created = {
+        id: uid('tpl'),
+        ownerUserId: currentUser.id,
+        ...payload,
+      };
+      setState((prev) => {
+        const existing = (prev.billTemplates || DEFAULT_BILL_TEMPLATES).map((t) =>
+          payload.isDefault ? { ...t, isDefault: false } : t
+        );
+        return { ...prev, billTemplates: [...existing, created] };
+      });
+      recordAudit('Bill Templates', 'Created', `Created bill template "${payload.name}"`);
+      showToast('New bill template added');
+    }
+    setModalOpen(false);
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold text-stone-900">Bill & Receipt Templates</h2>
+          <p className="text-xs text-stone-500">
+            Create and manage multiple receipt/invoice templates with your Guest House branding, GSTIN, UPI & terms.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={openAdd}
+          className="px-4 py-2.5 rounded-xl bg-[#7A1C24] text-white text-xs font-semibold flex items-center gap-1.5 shadow-sm hover:bg-[#5E141B]"
+        >
+          <Plus size={16} /> Add Bill Template
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {templates.map((tpl) => (
+          <div
+            key={tpl.id}
+            className={`bg-white rounded-2xl border p-5 shadow-xs flex flex-col justify-between space-y-4 ${
+              tpl.isDefault ? 'border-[#7A1C24] ring-2 ring-[#7A1C24]/15' : 'border-stone-200'
+            }`}
+          >
+            <div className="space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <h3 className="font-bold text-sm text-stone-900">{tpl.name}</h3>
+                  <p className="text-xs text-stone-600 font-medium mt-0.5">
+                    {tpl.businessName || resolvedGuestHouseInfo?.name || 'Guest House / Venue'}
+                  </p>
+                </div>
+                {tpl.isDefault && (
+                  <span className="px-2 py-0.5 rounded-full bg-amber-100 text-[#7A1C24] text-[10px] font-bold shrink-0">
+                    Default
+                  </span>
+                )}
+              </div>
+
+              <div className="text-[11px] text-stone-500 space-y-0.5 pt-1">
+                <div>Layout: {tpl.style === 'compact' ? 'Compact Receipt' : 'Standard Tax Invoice'}</div>
+                {tpl.gstin && <div>GSTIN: {tpl.gstin}</div>}
+                {tpl.phone && <div>Phone: {tpl.phone}</div>}
+                {tpl.upiId && <div>UPI: {tpl.upiId}</div>}
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-stone-100 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                {!tpl.isDefault && (
+                  <button
+                    type="button"
+                    onClick={() => setAsDefault(tpl.id)}
+                    className="px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-[#7A1C24] text-[11px] font-semibold"
+                  >
+                    Set Default
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setPreviewTpl(tpl)}
+                  className="px-2.5 py-1 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 text-[11px] font-semibold"
+                >
+                  Preview
+                </button>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => duplicateTemplate(tpl)}
+                  title="Duplicate Template"
+                  className="p-1.5 rounded-lg text-stone-600 hover:bg-stone-100"
+                >
+                  <CopyPlus size={14} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openEdit(tpl)}
+                  title="Edit Template"
+                  className="p-1.5 rounded-lg text-stone-600 hover:bg-stone-100"
+                >
+                  <Edit2 size={14} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => deleteTemplate(tpl)}
+                  title="Delete Template"
+                  className="p-1.5 rounded-lg text-red-600 hover:bg-red-50"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Create / Edit Bill Template Modal */}
+      <Modal
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={editingTpl ? 'Edit Bill Template' : 'Create Bill Template'}
+        maxWidth="max-w-2xl"
+      >
+        <form onSubmit={handleSave} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">
+                Template Name <span className="text-red-600">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="e.g. Banquet Hall GST Bill"
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">
+                Receipt Layout Style
+              </label>
+              <select
+                value={form.style}
+                onChange={(e) => setForm({ ...form, style: e.target.value })}
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm bg-white"
+              >
+                <option value="classic">Classic Invoice Layout</option>
+                <option value="compact">Compact Receipt Layout</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">
+                Guest House / Business Name
+              </label>
+              <input
+                type="text"
+                value={form.businessName}
+                onChange={(e) => setForm({ ...form, businessName: e.target.value })}
+                placeholder="Enter guest house name"
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">Tagline</label>
+              <input
+                type="text"
+                value={form.tagline}
+                onChange={(e) => setForm({ ...form, tagline: e.target.value })}
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">Phone</label>
+              <input
+                type="text"
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">GSTIN</label>
+              <input
+                type="text"
+                value={form.gstin}
+                onChange={(e) => setForm({ ...form, gstin: e.target.value })}
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">SAC Code</label>
+              <input
+                type="text"
+                value={form.sacCode}
+                onChange={(e) => setForm({ ...form, sacCode: e.target.value })}
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-stone-700 mb-1">Address</label>
+            <input
+              type="text"
+              value={form.address}
+              onChange={(e) => setForm({ ...form, address: e.target.value })}
+              className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">UPI ID</label>
+              <input
+                type="text"
+                value={form.upiId}
+                onChange={(e) => setForm({ ...form, upiId: e.target.value })}
+                placeholder="e.g. venue@upi"
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 mb-1">
+                Signatory Label
+              </label>
+              <input
+                type="text"
+                value={form.signatoryLabel}
+                onChange={(e) => setForm({ ...form, signatoryLabel: e.target.value })}
+                className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-stone-700 mb-1">
+              Bank Account Details
+            </label>
+            <input
+              type="text"
+              value={form.bankDetails}
+              onChange={(e) => setForm({ ...form, bankDetails: e.target.value })}
+              placeholder="Bank name, A/C No, IFSC"
+              className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-stone-700 mb-1">
+              Terms & Conditions
+            </label>
+            <textarea
+              rows={3}
+              value={form.terms}
+              onChange={(e) => setForm({ ...form, terms: e.target.value })}
+              className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm"
+            />
+          </div>
+
+          <label className="inline-flex items-center gap-2 text-xs font-semibold text-stone-800 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={Boolean(form.isDefault)}
+              onChange={(e) => setForm({ ...form, isDefault: e.target.checked })}
+            />
+            <span>Set as default bill template</span>
+          </label>
+
+          <div className="flex justify-end gap-2 pt-3 border-t border-stone-200">
+            <button
+              type="button"
+              onClick={() => setModalOpen(false)}
+              className="px-4 py-2 rounded-lg border border-stone-300 text-xs font-semibold"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 rounded-lg bg-[#7A1C24] text-white text-xs font-semibold"
+            >
+              Save Template
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        isOpen={Boolean(previewTpl)}
+        onClose={() => setPreviewTpl(null)}
+        title={previewTpl?.name || 'Template Preview'}
+        maxWidth="max-w-lg"
+      >
+        {previewTpl && (
+          <div className="p-5 rounded-2xl border border-stone-300 bg-white space-y-3 text-xs">
+            <div className="border-b border-stone-200 pb-3">
+              <div className="text-base font-extrabold text-[#7A1C24]">
+                {previewTpl.businessName || resolvedGuestHouseInfo?.name || 'Guest House'}
+              </div>
+              {previewTpl.tagline && <div className="text-stone-500">{previewTpl.tagline}</div>}
+              {previewTpl.address && <div className="text-stone-600 mt-1">{previewTpl.address}</div>}
+              <div className="text-[11px] text-stone-500 mt-1">
+                {previewTpl.phone ? `Phone: ${previewTpl.phone} • ` : ''}
+                {previewTpl.gstin ? `GSTIN: ${previewTpl.gstin}` : ''}
+              </div>
+            </div>
+            {(previewTpl.upiId || previewTpl.bankDetails) && (
+              <div className="p-2.5 rounded-lg bg-amber-50/70 text-[11px] space-y-0.5">
+                {previewTpl.upiId && <div>UPI: {previewTpl.upiId}</div>}
+                {previewTpl.bankDetails && <div>Bank: {previewTpl.bankDetails}</div>}
+              </div>
+            )}
+            <div className="text-[11px] text-stone-500 whitespace-pre-line">{previewTpl.terms}</div>
+            <div className="text-right font-semibold text-stone-700 pt-2">
+              {previewTpl.signatoryLabel || 'Authorized Signatory'}
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
