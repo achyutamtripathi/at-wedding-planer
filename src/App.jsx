@@ -10068,10 +10068,7 @@ function BillTemplatesModule({
     upiId: '',
     bankDetails: '',
     signatoryLabel: 'Authorized Signatory',
-    terms:
-      '1. 50% advance required at booking confirmation.\n'
-      '2. Balance due prior to event start.\n'
-      '3. Terms & conditions apply as per venue agreement.',
+    terms: '1. 50% advance required at booking confirmation.\n2. Balance due prior to event start.\n3. Terms & conditions apply as per venue agreement.',
     isDefault: false,
   });
 
