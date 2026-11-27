@@ -1243,6 +1243,35 @@ export default function App() {
     return days;
   }, [activeWedding]);
 
+  // Function/Event scoping for Sub-Admins and Members
+  const allowedEventNames = useMemo(() => {
+    if (!currentUser || isSuperAdmin || isGuestHouse) return null;
+    const ids = Array.isArray(currentUser.assignedEventIds) ? currentUser.assignedEventIds : [];
+    if (ids.length === 0) return null; // Empty means all functions within assigned wedding
+    const matched = state.events
+      .filter((e) => e.weddingId === activeWedding?.id && ids.includes(e.id))
+      .map((e) => e.name.toLowerCase());
+    return new Set(matched);
+  }, [currentUser, isSuperAdmin, isGuestHouse, state.events, activeWedding?.id]);
+
+  // All bookings owned by this Guest House across all its weddings (for conflict detection & calendar)
+  const guestHouseAllBookings = useMemo(() => {
+    if (isSuperAdmin) return state.bookings || [];
+    const myWedIds = new Set(accessibleWeddings.map((w) => w.id));
+    return (state.bookings || []).filter(
+      (b) => myWedIds.has(b.weddingId) || b.ownerUserId === currentUser?.id
+    );
+  }, [isSuperAdmin, state.bookings, accessibleWeddings, currentUser.id]);
+
+  const scopedBillTemplates = useMemo(() => {
+    const all = Array.isArray(state.billTemplates) && state.billTemplates.length > 0
+      ? state.billTemplates
+      : DEFAULT_BILL_TEMPLATES;
+    if (isSuperAdmin) return all;
+    const ownerId = isGuestHouse ? currentUser.id : resolvedGuestHouseInfo.id;
+    return all.filter((t) => t.ownerUserId === 'system' || t.ownerUserId === ownerId);
+  }, [state.billTemplates, isSuperAdmin, isGuestHouse, currentUser.id, resolvedGuestHouseInfo.id]);
+
   if (!currentUser) {
     return (
       <LoginScreen
@@ -1255,17 +1284,6 @@ export default function App() {
       />
     );
   }
-
-  // Function/Event scoping for Sub-Admins and Members
-  const allowedEventNames = useMemo(() => {
-    if (!currentUser || isSuperAdmin || isGuestHouse) return null;
-    const ids = Array.isArray(currentUser.assignedEventIds) ? currentUser.assignedEventIds : [];
-    if (ids.length === 0) return null; // Empty means all functions within assigned wedding
-    const matched = state.events
-      .filter((e) => e.weddingId === activeWedding?.id && ids.includes(e.id))
-      .map((e) => e.name.toLowerCase());
-    return new Set(matched);
-  }, [currentUser, isSuperAdmin, isGuestHouse, state.events, activeWedding?.id]);
 
   // Scoped records for active wedding (and assigned functions if restricted)
   const allWeddingEvents = state.events.filter((e) => e.weddingId === activeWedding?.id);
@@ -1281,15 +1299,6 @@ export default function App() {
     }
     return true;
   });
-
-  // All bookings owned by this Guest House across all its weddings (for conflict detection & calendar)
-  const guestHouseAllBookings = useMemo(() => {
-    if (isSuperAdmin) return state.bookings || [];
-    const myWedIds = new Set(accessibleWeddings.map((w) => w.id));
-    return (state.bookings || []).filter(
-      (b) => myWedIds.has(b.weddingId) || b.ownerUserId === currentUser.id
-    );
-  }, [isSuperAdmin, state.bookings, accessibleWeddings, currentUser.id]);
 
   const weddingGuests = isGuestHouse
     ? []
@@ -1326,15 +1335,6 @@ export default function App() {
     const ownerId = isGuestHouse ? currentUser.id : resolvedGuestHouseInfo.id;
     return !ownerId || sp.ownerUserId === ownerId;
   });
-
-  const scopedBillTemplates = useMemo(() => {
-    const all = Array.isArray(state.billTemplates) && state.billTemplates.length > 0
-      ? state.billTemplates
-      : DEFAULT_BILL_TEMPLATES;
-    if (isSuperAdmin) return all;
-    const ownerId = isGuestHouse ? currentUser.id : resolvedGuestHouseInfo.id;
-    return all.filter((t) => t.ownerUserId === 'system' || t.ownerUserId === ownerId);
-  }, [state.billTemplates, isSuperAdmin, isGuestHouse, currentUser.id, resolvedGuestHouseInfo.id]);
 
   const canManageAdminTabs = isSuperAdmin || isGuestHouse || isSubAdmin;
 
